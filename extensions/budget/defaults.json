@@ -1,0 +1,1 @@
+{ "windows": { "day": { "hours": 24, "usd": 40 }, "week": { "hours": 168, "usd": 100 } }, "warnAt": 0.8, "continueStep": 0.25 }
