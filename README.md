@@ -13,6 +13,8 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 
 ## Install
 
+Setting this up for a team, with a private Azure DevOps copy and a shared folder? Follow [docs/work-setup.md](docs/work-setup.md).
+
 You need `git`, Node.js, and pi signed in to GitHub Copilot (`/login` in pi).
 
 ```bash
@@ -121,6 +123,14 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Extensions                        | `extensions/<name>/index.ts`                                   |
 
 This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits.
+
+## Check an install
+
+```bash
+node ~/pi-config/scripts/smoke-copilot.mjs
+```
+
+It checks the install and makes one tiny request to GitHub Copilot, well under a cent. Add `--default` to also try the team default model.
 
 ## Develop
 
