@@ -10,88 +10,98 @@ import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { type ExtensionAPI, getAgentDir } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { Type } from "typebox";
+import { parseJson } from "../../src/json.ts";
 
-const run = promisify(execFile);
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
 
 // Never let git ask for credentials: it would hang or draw over the TUI.
 const quietEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" };
 
-async function git(args: string[], timeout = 20_000): Promise<string> {
-	const { stdout } = await run("git", ["-C", repo, ...args], { env: quietEnv, timeout });
-	return stdout.trim();
+function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv, timeout: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { env, timeout }, (error, stdout, stderr) => {
+      if (error === null) {
+        resolve(stdout.trim());
+      } else {
+        const detail = stderr.trim() === "" ? error.message : stderr.trim();
+        reject(new Error(`${command} ${args.join(" ")}: ${detail}`, { cause: error }));
+      }
+    });
+  });
 }
 
-interface State {
-	checkedAt: number;
+function git(args: readonly string[], timeout = 20_000): Promise<string> {
+  return run("git", ["-C", repo, ...args], quietEnv, timeout);
 }
 
-const statePath = () => join(getAgentDir(), "pi-config-update.json");
+const StateSchema = Type.Object({ checkedAt: Type.Number() }, { additionalProperties: false });
 
-function readState(): State {
-	try {
-		return JSON.parse(readFileSync(statePath(), "utf8"));
-	} catch {
-		return { checkedAt: 0 };
-	}
+const statePath = (): string => join(getAgentDir(), "pi-config-update.json");
+
+function lastCheckedAt(): number {
+  try {
+    return parseJson(StateSchema, readFileSync(statePath(), "utf8"), statePath()).checkedAt;
+  } catch {
+    return 0;
+  }
 }
 
 /** Commits on the upstream branch that HEAD doesn't have yet. */
 async function pendingCommits(): Promise<string[]> {
-	const log = await git(["log", "--oneline", "HEAD..@{upstream}"]);
-	return log ? log.split("\n") : [];
+  const log = await git(["log", "--oneline", "HEAD..@{upstream}"]);
+  return log === "" ? [] : log.split("\n");
 }
 
-export default function (pi: ExtensionAPI) {
-	pi.on("session_start", async (event, ctx) => {
-		if (event.reason !== "startup" || !ctx.hasUI || process.env.PI_CONFIG_UPDATE_CHECK === "0") return;
-		const due = Date.now() - readState().checkedAt > CHECK_EVERY_MS;
-		// Not awaited: startup must not wait on the network.
-		void (async () => {
-			try {
-				if (due) {
-					await git(["fetch", "--quiet"]);
-					writeFileSync(statePath(), JSON.stringify({ checkedAt: Date.now() } satisfies State));
-				}
-				const pending = await pendingCommits();
-				if (pending.length > 0) {
-					ctx.ui.notify(`pi-config has ${pending.length} update(s). Run /pi-config-update to install.`, "info");
-				}
-			} catch {
-				// Offline, no upstream, or not a git clone: check again next startup.
-			}
-		})();
-	});
+async function checkForUpdates(ctx: ExtensionContext): Promise<void> {
+  if (Date.now() - lastCheckedAt() > CHECK_EVERY_MS) {
+    await git(["fetch", "--quiet"]);
+    writeFileSync(statePath(), JSON.stringify({ checkedAt: Date.now() }));
+  }
+  const pending = await pendingCommits();
+  if (pending.length > 0) {
+    ctx.ui.notify(`pi-config has ${String(pending.length)} update(s). Run /pi-config-update to install.`, "info");
+  }
+}
 
-	pi.registerCommand("pi-config-update", {
-		description: "Pull the latest team pi-config, reinstall it and reload",
-		handler: async (_args, ctx) => {
-			try {
-				if (await git(["status", "--porcelain"])) {
-					ctx.ui.notify(`${repo} has local changes. Commit or stash them, then try again.`, "error");
-					return;
-				}
-				await git(["fetch", "--quiet"], 60_000);
-				const pending = await pendingCommits();
-				if (pending.length === 0) {
-					ctx.ui.notify("pi-config is up to date.", "info");
-					return;
-				}
-				if (!(await ctx.ui.confirm("Update pi-config?", pending.join("\n")))) return;
-				await git(["merge", "--ff-only", "@{upstream}"]);
-				await run("bash", [join(repo, "install.sh")], {
-					env: { ...quietEnv, PI_CODING_AGENT_DIR: getAgentDir() },
-					timeout: 120_000,
-				});
-				ctx.ui.notify(`pi-config updated (${pending.length} commit(s)). Reloading.`, "info");
-				await ctx.reload();
-			} catch (err) {
-				const message = err instanceof Error ? err.message : String(err);
-				ctx.ui.notify(`pi-config update failed: ${message}`, "error");
-			}
-		},
-	});
+export default function piConfigUpdate(pi: ExtensionAPI): void {
+  pi.on("session_start", (event, ctx) => {
+    if (event.reason !== "startup" || !ctx.hasUI || process.env["PI_CONFIG_UPDATE_CHECK"] === "0") {
+      return;
+    }
+    // Not awaited: startup must not wait on the network. Offline, no upstream,
+    // or not a git clone all mean "check again next startup".
+    checkForUpdates(ctx).catch(() => undefined);
+  });
+
+  pi.registerCommand("pi-config-update", {
+    description: "Pull the latest team pi-config, reinstall it and reload",
+    handler: async (_args, ctx) => {
+      try {
+        if ((await git(["status", "--porcelain"])) !== "") {
+          ctx.ui.notify(`${repo} has local changes. Commit or stash them, then try again.`, "error");
+          return;
+        }
+        await git(["fetch", "--quiet"], 60_000);
+        const pending = await pendingCommits();
+        if (pending.length === 0) {
+          ctx.ui.notify("pi-config is up to date.", "info");
+          return;
+        }
+        if (!(await ctx.ui.confirm("Update pi-config?", pending.join("\n")))) {
+          return;
+        }
+        await git(["merge", "--ff-only", "@{upstream}"]);
+        await run("bash", [join(repo, "install.sh")], { ...quietEnv, PI_CODING_AGENT_DIR: getAgentDir() }, 120_000);
+        ctx.ui.notify(`pi-config updated (${String(pending.length)} commit(s)). Reloading.`, "info");
+        await ctx.reload();
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        ctx.ui.notify(`pi-config update failed: ${message}`, "error");
+      }
+    }
+  });
 }

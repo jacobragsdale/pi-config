@@ -4,12 +4,12 @@ Copilot bills pi's requests per token, in AI credits (1 credit = $0.01). This pa
 
 ## Team defaults
 
-| Setting | Value | Why |
-|---|---|---|
-| Model | `github-copilot/gpt-6.1-sol` | Team choice for everyday work. |
-| Thinking | `high` for GPT-6.1 Sol | Set per model in `modelThinkingLevels`, so switching to a cheaper model doesn't carry high thinking with it. |
-| Context window | Capped at each model's price threshold | See below. |
-| `compaction.reserveTokens` | `32768` | Starts compaction early enough that one large tool result can't push a request over the threshold. |
+| Setting                    | Value                                  | Why                                                                                                          |
+| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Model                      | `github-copilot/gpt-6.1-sol`           | Team choice for everyday work.                                                                               |
+| Thinking                   | `high` for GPT-6.1 Sol                 | Set per model in `modelThinkingLevels`, so switching to a cheaper model doesn't carry high thinking with it. |
+| Context window             | Capped at each model's price threshold | See below.                                                                                                   |
+| `compaction.reserveTokens` | `32768`                                | Starts compaction early enough that one large tool result can't push a request over the threshold.           |
 
 Switch models for one session with `/model`. Thinking tokens bill as output, so `high` costs more per task than the figures below on tasks where the model thinks a lot.
 
@@ -30,35 +30,35 @@ Two task sizes, priced from GitHub's published rates:
 
 New input is billed at the cache-write rate on models that charge one, and at the input rate otherwise. "Above the threshold" prices the hour-long task as if every request ran at the long-context rate, which is what an uncapped window drifts toward.
 
-| Model | Small task | Hour-long task | Hour-long, above the threshold | Threshold |
-|---|---:|---:|---:|---:|
-| `gpt-6-luna` | $0.005 | $0.52 | $0.93 | 272K |
-| `claude-haiku-5.5` | $0.005 | $0.52 | $2.58 | 100K |
-| `mai-code-1.1-flash` | $0.010 | $1.02 | — | — |
-| `gpt-5.4-nano` | $0.010 | $1.04 | — | — |
-| `gpt-5.6-luna` | $0.011 | $1.11 | $1.98 | 200K |
-| `gemini-3.8-flash` | $0.035 | $3.52 | — | — |
-| `claude-haiku-4.5` | $0.051 | $5.15 | — | — |
-| `gemini-4-argon` | $0.085 | $8.50 | — | — |
-| `gpt-6.1-sol` | $0.094 | $9.40 | $16.80 | 272K |
-| `claude-sonnet-5.5` | $0.094 | $9.40 | — | — |
-| `gpt-6-sol` | $0.10 | $10.30 | $18.60 | 272K |
-| `claude-sonnet-5` | $0.10 | $10.30 | — | — |
-| `gpt-5.3-codex` | $0.10 | $10.32 | — | — |
-| `grok-4.5` | $0.10 | $10.50 | $21.00 | 200K |
-| `grok-4.6` | $0.10 | $10.50 | $21.00 | 200K |
-| `grok-4.7` | $0.10 | $10.50 | $21.00 | 200K |
-| `gpt-5.6-terra` | $0.11 | $11.10 | $19.80 | 272K |
-| `kimi-k3` | $0.14 | $14.10 | — | — |
-| `claude-sonnet-4` | $0.15 | $15.45 | — | — |
-| `claude-sonnet-4.6` | $0.15 | $15.45 | — | — |
-| `claude-opus-5.5` | $0.19 | $18.80 | — | — |
-| `gpt-5.6-sol` | $0.21 | $20.60 | $37.20 | 272K |
-| `claude-opus-4.8` | $0.26 | $25.75 | — | — |
-| `claude-opus-5` | $0.26 | $25.75 | — | — |
-| `claude-fable-5.1` | $0.45 | $44.75 | — | — |
-| `gpt-6-astra` | $0.52 | $51.50 | $93.00 | 272K |
-| `claude-fable-5` | $0.52 | $51.50 | — | — |
+| Model                | Small task | Hour-long task | Hour-long, above the threshold | Threshold |
+| -------------------- | ---------: | -------------: | -----------------------------: | --------: |
+| `gpt-6-luna`         |     $0.005 |          $0.52 |                          $0.93 |      272K |
+| `claude-haiku-5.5`   |     $0.005 |          $0.52 |                          $2.58 |      100K |
+| `mai-code-1.1-flash` |     $0.010 |          $1.02 |                              — |         — |
+| `gpt-5.4-nano`       |     $0.010 |          $1.04 |                              — |         — |
+| `gpt-5.6-luna`       |     $0.011 |          $1.11 |                          $1.98 |      200K |
+| `gemini-3.8-flash`   |     $0.035 |          $3.52 |                              — |         — |
+| `claude-haiku-4.5`   |     $0.051 |          $5.15 |                              — |         — |
+| `gemini-4-argon`     |     $0.085 |          $8.50 |                              — |         — |
+| `gpt-6.1-sol`        |     $0.094 |          $9.40 |                         $16.80 |      272K |
+| `claude-sonnet-5.5`  |     $0.094 |          $9.40 |                              — |         — |
+| `gpt-6-sol`          |      $0.10 |         $10.30 |                         $18.60 |      272K |
+| `claude-sonnet-5`    |      $0.10 |         $10.30 |                              — |         — |
+| `gpt-5.3-codex`      |      $0.10 |         $10.32 |                              — |         — |
+| `grok-4.5`           |      $0.10 |         $10.50 |                         $21.00 |      200K |
+| `grok-4.6`           |      $0.10 |         $10.50 |                         $21.00 |      200K |
+| `grok-4.7`           |      $0.10 |         $10.50 |                         $21.00 |      200K |
+| `gpt-5.6-terra`      |      $0.11 |         $11.10 |                         $19.80 |      272K |
+| `kimi-k3`            |      $0.14 |         $14.10 |                              — |         — |
+| `claude-sonnet-4`    |      $0.15 |         $15.45 |                              — |         — |
+| `claude-sonnet-4.6`  |      $0.15 |         $15.45 |                              — |         — |
+| `claude-opus-5.5`    |      $0.19 |         $18.80 |                              — |         — |
+| `gpt-5.6-sol`        |      $0.21 |         $20.60 |                         $37.20 |      272K |
+| `claude-opus-4.8`    |      $0.26 |         $25.75 |                              — |         — |
+| `claude-opus-5`      |      $0.26 |         $25.75 |                              — |         — |
+| `claude-fable-5.1`   |      $0.45 |         $44.75 |                              — |         — |
+| `gpt-6-astra`        |      $0.52 |         $51.50 |                         $93.00 |      272K |
+| `claude-fable-5`     |      $0.52 |         $51.50 |                              — |         — |
 
 These are estimates: real tasks vary in their mix of input and output, and Copilot's bill is the final word.
 
