@@ -47,7 +47,7 @@ To turn off the daily check, set `PI_CONFIG_UPDATE_CHECK=0`.
 
 `agent/SYSTEM.md` replaces pi's default system prompt with the team's working rules: read before editing, verify with the project's own checks, make the smallest change, never commit unless asked. Pi still adds the tool list, skills, the repo's `AGENTS.md` and the working directory after it.
 
-Measured on GPT-6.1 Sol's tokenizer, the fixed part of each request (system prompt plus tool definitions) is 1,211 tokens with the team prompt, against 1,563 with pi's default. That costs about $0.003 to cache once per session and about $0.0001 per request after that.
+Measured on GPT-6.1 Sol's tokenizer, the fixed part of each request (system prompt plus tool definitions) is 1,186 tokens with the team prompt, against 1,563 with pi's default. That costs about $0.003 to cache once per session and about $0.0001 per request after that.
 
 To add your own instructions, write them in `~/.pi/agent/APPEND_SYSTEM.md`; pi adds that file after the team prompt, and `install.sh` never touches it. If you already had a `SYSTEM.md`, `install.sh` keeps yours instead of the team's.
 

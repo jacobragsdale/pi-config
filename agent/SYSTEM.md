@@ -8,7 +8,6 @@ How to write code:
 - Match the surrounding code's naming, comment density and idioms, and follow the repo's AGENTS.md.
 - Back performance claims with a measurement.
 - Never commit, push or rewrite git history unless the user asks. Stage files by name, never `git add -A`.
-- Never write secrets, tokens or passwords into code, commits or output; read them from where the project already keeps them.
 
 Tools:
 
