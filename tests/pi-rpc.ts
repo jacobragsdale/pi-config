@@ -52,8 +52,13 @@ export class PiRpc {
   readonly #listeners = new Set<() => void>();
   #buffer = "";
   #nextId = 0;
-  /** Answer for each confirm dialog, in order. Missing answers decline. */
-  public confirmAnswers: boolean[] = [];
+  /**
+   * Answers for dialogs, consumed in order per kind. A missing answer
+   * declines a confirm and cancels the other dialogs. An editor answer
+   * receives the prefilled text and returns the edited text, or undefined
+   * to cancel.
+   */
+  public readonly answers: { confirm: boolean[]; select: string[]; input: string[]; editor: ((prefill: string) => string | undefined)[] } = { confirm: [], select: [], input: [], editor: [] };
 
   constructor(options: StartOptions) {
     const cwd = join(options.agentDir, "work");
@@ -83,11 +88,37 @@ export class PiRpc {
 
   #receive(record: RpcRecord): void {
     this.records.push(record);
-    if (record["type"] === "extension_ui_request" && record["method"] === "confirm") {
-      this.send({ type: "extension_ui_response", id: record["id"], confirmed: this.confirmAnswers.shift() ?? false });
+    if (record["type"] === "extension_ui_request") {
+      this.#answer(record);
     }
     for (const listener of this.#listeners) {
       listener();
+    }
+  }
+
+  #answer(request: RpcRecord): void {
+    const id = request["id"];
+    const reply = (fields: RpcRecord): void => {
+      this.send({ type: "extension_ui_response", id, ...fields });
+    };
+    const value = (answer: string | undefined): void => {
+      reply(answer === undefined ? { cancelled: true } : { value: answer });
+    };
+    switch (request["method"]) {
+      case "confirm":
+        reply({ confirmed: this.answers.confirm.shift() ?? false });
+        break;
+      case "select":
+        value(this.answers.select.shift());
+        break;
+      case "input":
+        value(this.answers.input.shift());
+        break;
+      case "editor":
+        value(this.answers.editor.shift()?.(field(request, "prefill")));
+        break;
+      default:
+        break;
     }
   }
 

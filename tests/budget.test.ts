@@ -80,7 +80,7 @@ await test("continues when confirmed and asks again one step later", async () =>
   const agentDir = makeAgentDir();
   seed(agentDir, [{ usd: 40, hoursAgo: 1 }]);
   const { pi, log } = start(agentDir, { SCRIPTED_COST: "5" });
-  pi.confirmAnswers = [true];
+  pi.answers.confirm.push(true);
   await pi.prompt("first");
   await pi.prompt("second");
   assert.equal(requestCount(log), 2);

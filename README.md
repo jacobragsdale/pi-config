@@ -6,6 +6,8 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 
 - **Copilot defaults:** GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $40 a day and $100 a week, with your spend shown in pi's footer. See [Spending limits](#spending-limits).
+- **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
+- **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
 - **Update checks:** once a day, pi checks this clone for new commits and tells you to run `/pi-config-update`.
 
 ## Install
@@ -59,6 +61,38 @@ To change your limits, create `~/.pi/agent/budget.json` with only the values you
 
 The other settings are `warnAt` (default `0.8`) and `continueStep` (default `0.25`). If `budget.json` is invalid, pi shows an error and the limits are off until you fix it.
 
+## Sharing prompts
+
+Run `/submit-prompt` in a session whose prompts you'd like the team to see, whether they worked well or not. Nothing is shared unless you run it.
+
+1. Choose what to submit: just your prompts, or the whole conversation, which adds pi's replies and the first 600 characters of each tool call and result.
+2. Say how it went, and optionally what you were trying to do.
+3. Review the submission in the editor. Tokens, keys and passwords that look like secrets are already masked, but the masking can miss things: delete anything you don't want to share.
+4. Confirm, and it is saved to the team's shared folder.
+
+Each submission is one markdown file, named `<YYYY-MM>/<time>-<your name>-<random>.md`. Its header records the model, thinking level, cost, prompt and tool-call counts, and your outcome rating.
+
+If the shared folder isn't mounted, the file is saved in `~/.pi/agent/prompt-submissions/` instead, and pi tells you to copy it over later.
+
+### Set up the shared folder
+
+The repo is public, so the folder's path isn't in it. In the team's private copy, add `team.json` at the repo root and commit it there with `git add -f team.json` (the public repo ignores it):
+
+```json
+{ "promptShareDir": "/mnt/team-share/pi-prompts" }
+```
+
+`PI_PROMPT_SHARE_DIR` overrides it for one person. Create an empty file named `.pi-prompt-share` in the folder. Pi only writes to a folder that contains it, so a mount point whose NFS share isn't mounted is never mistaken for the share.
+
+### Reviewing submissions
+
+Read the files straight from the shared folder. When a prompt is worth reusing, turn it into a pi prompt template in this repo's `prompts/` folder and open a pull request; everyone gets it with their next update.
+
+### What pi itself can upload
+
+- `/share` uploads a session and returns a link. pi-config sets `sessionShareDestination` to `radius`, so `/share` fails unless you have signed in to pi.dev's Radius service with `/login radius`. Without this setting it would fall back to a private GitHub gist.
+- `/bug` sends a bug report, optionally with your transcript, to pi's developers after asking you. At work, choose **Export as Zip** instead of **Upload Report**.
+
 ## Your own settings
 
 The team keys win each time `install.sh` runs, so change a team setting for a single session (`/model`, the thinking level) rather than in `settings.json`. Keys the team doesn't set are yours to change.
@@ -73,7 +107,7 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Team spending limits              | `extensions/budget/defaults.json`                              |
 | Extensions                        | `extensions/<name>/index.ts`                                   |
 
-This repo is public: don't commit company names, internal URLs, hostnames or paths. Put machine- or company-specific values in `team.local.json`, which git ignores.
+This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits.
 
 ## Develop
 

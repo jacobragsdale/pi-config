@@ -6,13 +6,13 @@
  * credentials, and stays quiet when the remote can't be reached.
  * Set PI_CONFIG_UPDATE_CHECK=0 to turn it off.
  */
-import { execFile } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { run } from "../../src/exec.ts";
 import { parseJson } from "../../src/json.ts";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -21,21 +21,8 @@ const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
 // Never let git ask for credentials: it would hang or draw over the TUI.
 const quietEnv = { ...process.env, GIT_TERMINAL_PROMPT: "0", GCM_INTERACTIVE: "never" };
 
-function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv, timeout: number): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(command, args, { env, timeout }, (error, stdout, stderr) => {
-      if (error === null) {
-        resolve(stdout.trim());
-      } else {
-        const detail = stderr.trim() === "" ? error.message : stderr.trim();
-        reject(new Error(`${command} ${args.join(" ")}: ${detail}`, { cause: error }));
-      }
-    });
-  });
-}
-
 function git(args: readonly string[], timeout = 20_000): Promise<string> {
-  return run("git", ["-C", repo, ...args], quietEnv, timeout);
+  return run("git", ["-C", repo, ...args], { env: quietEnv, timeout });
 }
 
 const StateSchema = Type.Object({ checkedAt: Type.Number() }, { additionalProperties: false });
@@ -95,7 +82,7 @@ export default function piConfigUpdate(pi: ExtensionAPI): void {
           return;
         }
         await git(["merge", "--ff-only", "@{upstream}"]);
-        await run("bash", [join(repo, "install.sh")], { ...quietEnv, PI_CODING_AGENT_DIR: getAgentDir() }, 120_000);
+        await run("bash", [join(repo, "install.sh")], { env: { ...quietEnv, PI_CODING_AGENT_DIR: getAgentDir() }, timeout: 120_000 });
         ctx.ui.notify(`pi-config updated (${String(pending.length)} commit(s)). Reloading.`, "info");
         await ctx.reload();
       } catch (err) {

@@ -1,11 +1,11 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { SessionEntry, SessionMessageEntry } from "@earendil-works/pi-coding-agent";
-import type { Usage } from "@earendil-works/pi-ai";
+import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Static } from "typebox";
 import { Check } from "typebox/value";
 import { parseJson, validate } from "../../src/json.ts";
+import { entryCost } from "../../src/usage.ts";
 
 const WindowSchema = Type.Object({ hours: Type.Number({ exclusiveMinimum: 0 }), usd: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]) }, { additionalProperties: false });
 
@@ -46,41 +46,10 @@ const SpendSchema = Type.Object({ t: Type.Number(), usd: Type.Number(), model: T
 /** One billed model call: when it was recorded, its cost and where it came from. */
 export type Spend = Readonly<Static<typeof SpendSchema>>;
 
-function spend(usage: Usage, model: string, kind: string, session: string, now: number): Spend | undefined {
-  const usd = usage.cost.total;
-  return usd > 0 ? { t: now, usd, model, kind, session } : undefined;
-}
-
-function messageSpend(entry: SessionMessageEntry, session: string, now: number): Spend | undefined {
-  const message = entry.message;
-  if (message.role === "assistant") {
-    return spend(message.usage, `${message.provider}/${message.responseModel ?? message.model}`, "reply", session, now);
-  }
-  if (message.role === "toolResult" && message.usage !== undefined) {
-    return spend(message.usage, "tools", "tool", session, now);
-  }
-  return undefined;
-}
-
-/** The cost of a session entry, counted the way pi's /session totals count it. */
+/** The cost of a session entry as a ledger line, or undefined when it cost nothing. */
 export function entrySpend(entry: SessionEntry, session: string, now: number): Spend | undefined {
-  switch (entry.type) {
-    case "usage":
-      return spend(entry.usage, `${entry.provider}/${entry.model}`, entry.kind, session, now);
-    case "compaction":
-    case "branch_summary":
-      return entry.usage === undefined ? undefined : spend(entry.usage, "summaries", entry.type, session, now);
-    case "message":
-      return messageSpend(entry, session, now);
-    case "thinking_level_change":
-    case "model_change":
-    case "custom":
-    case "custom_message":
-    case "context_edit":
-    case "label":
-    case "session_info":
-      return undefined;
-  }
+  const cost = entryCost(entry);
+  return cost === undefined ? undefined : { t: now, ...cost, session };
 }
 
 const monthKey = (ms: number): string => new Date(ms).toISOString().slice(0, 7);

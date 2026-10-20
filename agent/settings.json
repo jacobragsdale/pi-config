@@ -1,1 +1,7 @@
-{ "defaultProvider": "github-copilot", "defaultModel": "gpt-6.1-sol", "modelThinkingLevels": { "github-copilot/gpt-6.1-sol": "high" }, "compaction": { "reserveTokens": 32768 } }
+{
+  "defaultProvider": "github-copilot",
+  "defaultModel": "gpt-6.1-sol",
+  "modelThinkingLevels": { "github-copilot/gpt-6.1-sol": "high" },
+  "compaction": { "reserveTokens": 32768 },
+  "sessionShareDestination": "radius"
+}
