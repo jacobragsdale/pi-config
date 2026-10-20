@@ -76,7 +76,9 @@ function liveRequest(model, thinking) {
   const label = `${model} (thinking ${thinking})`;
   const sessions = mkdtempSync(join(tmpdir(), "pi-smoke-"));
   const before = ledgerTotal();
-  const result = run("pi", ["--model", `github-copilot/${model}`, "--thinking", thinking, "--session-dir", sessions, "-p", "Reply with exactly: ok"], { env: { ...process.env, PI_CONFIG_UPDATE_CHECK: "0" } });
+  const result = run("pi", ["--model", `github-copilot/${model}`, "--thinking", thinking, "--session-dir", sessions, "-p", "Reply with exactly: ok"], {
+    env: { ...process.env, PI_CONFIG_UPDATE_CHECK: "0" }
+  });
   if (result.status !== 0 || !/\bok\b/i.test(result.stdout)) {
     fail(`${label}: request failed. Is pi signed in to Copilot (/login)?\n${result.stdout}${result.stderr}`);
     return;
