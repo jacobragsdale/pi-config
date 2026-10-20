@@ -58,6 +58,14 @@ await test("logs each reply's cost and shows spend in the footer", async () => {
   assert.equal(pi.lastStatus("budget"), "day $2.50/$40.00 · week $2.50/$100.00");
 });
 
+await test("shows sub-dollar spend and limits with enough decimals to read", async () => {
+  const agentDir = makeAgentDir();
+  writeFileSync(join(agentDir, "budget.json"), JSON.stringify({ windows: { day: { usd: 0.05 } } }));
+  const { pi } = start(agentDir, { SCRIPTED_COST: "0.0004" });
+  await pi.prompt("hello");
+  assert.equal(pi.lastStatus("budget"), "day $0.0004/$0.050 · week $0.0004/$100.00");
+});
+
 await test("warns once spend passes 80% of a limit", async () => {
   const agentDir = makeAgentDir();
   seed(agentDir, [{ usd: 31, hoursAgo: 1 }]);
