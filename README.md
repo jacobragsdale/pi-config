@@ -6,6 +6,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 
 - **Copilot defaults:** GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $40 a day and $100 a week, with your spend shown in pi's footer. See [Spending limits](#spending-limits).
+- **System prompt:** a short team prompt that replaces pi's default, plus an `agent-cli` skill pi loads only when a task needs it. See [System prompt](#system-prompt).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
 - **Update checks:** once a day, pi checks this clone for new commits and tells you to run `/pi-config-update`.
@@ -39,6 +40,16 @@ When pi says pi-config has updates, run `/pi-config-update` in pi. It shows the 
 To update by hand instead: `git -C ~/pi-config pull`, then `~/pi-config/install.sh`.
 
 To turn off the daily check, set `PI_CONFIG_UPDATE_CHECK=0`.
+
+## System prompt
+
+`agent/SYSTEM.md` replaces pi's default system prompt with the team's working rules: read before editing, verify with the project's own checks, make the smallest change, never commit unless asked. Pi still adds the tool list, skills, the repo's `AGENTS.md` and the working directory after it.
+
+Measured on GPT-6.1 Sol's tokenizer, the fixed part of each request (system prompt plus tool definitions) is 1,211 tokens with the team prompt, against 1,563 with pi's default. That costs about $0.003 to cache once per session and about $0.0001 per request after that.
+
+To add your own instructions, write them in `~/.pi/agent/APPEND_SYSTEM.md`; pi adds that file after the team prompt, and `install.sh` never touches it. If you already had a `SYSTEM.md`, `install.sh` keeps yours instead of the team's.
+
+The `agent-cli` skill in `skills/` tells pi how to reach Azure DevOps, Azure, Kubernetes, databases and other work systems through [agent-cli](https://github.com/jacobragsdale/agent-cli). Only its one-line description is in each request; pi reads the rest when a task calls for it.
 
 ## Spending limits
 
@@ -105,6 +116,8 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Model context caps or price fixes | `agent/models.json`, then run `npm run check-prices`           |
 | Copilot prices                    | `data/copilot-prices.json` (copied from GitHub's pricing page) |
 | Team spending limits              | `extensions/budget/defaults.json`                              |
+| Team system prompt                | `agent/SYSTEM.md`                                              |
+| Skills                            | `skills/<name>/SKILL.md`                                       |
 | Extensions                        | `extensions/<name>/index.ts`                                   |
 
 This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits.
