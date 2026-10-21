@@ -13,19 +13,13 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { dollars } from "../../src/dollars.ts";
 import { Ledger, entrySpend, loadConfig, longestWindowHours, windowStatuses } from "./ledger.ts";
 import type { BudgetConfig, Spend, WindowStatus } from "./ledger.ts";
 
 const teamConfigPath = join(dirname(fileURLToPath(import.meta.url)), "defaults.json");
 const personalConfigPath = (): string => join(getAgentDir(), "budget.json");
 
-/** Cents for amounts of a dollar or more; more decimals below that, so small limits stay readable. */
-function dollars(usd: number): string {
-  if (usd === 0 || usd >= 1) {
-    return `$${usd.toFixed(2)}`;
-  }
-  return `$${usd.toFixed(usd >= 0.01 ? 3 : 4)}`;
-}
 const span = (hours: number): string => (hours % 24 === 0 ? `${String(hours / 24)} day(s)` : `${String(hours)} hour(s)`);
 
 export default function budget(pi: ExtensionAPI): void {

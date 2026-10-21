@@ -1,10 +1,10 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import type { Static } from "typebox";
 import { Check } from "typebox/value";
 import { parseJson, validate } from "../../src/json.ts";
+import { MonthlyLog } from "../../src/monthly-log.ts";
 import { entryCost } from "../../src/usage.ts";
 
 const WindowSchema = Type.Object({ hours: Type.Number({ exclusiveMinimum: 0 }), usd: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]) }, { additionalProperties: false });
@@ -52,65 +52,10 @@ export function entrySpend(entry: SessionEntry, session: string, now: number): S
   return cost === undefined ? undefined : { t: now, ...cost, session };
 }
 
-const monthKey = (ms: number): string => new Date(ms).toISOString().slice(0, 7);
-
-/**
- * Spend log shared by every pi process using the same agent directory, one
- * JSON line per billed call in a file per UTC month.
- */
-export class Ledger {
-  readonly #dir: string;
-
+/** Spend log shared by every pi process using the same agent directory, one line per billed call. */
+export class Ledger extends MonthlyLog<Spend> {
   constructor(dir: string) {
-    this.#dir = dir;
-  }
-
-  public append(spends: readonly Spend[]): void {
-    if (spends.length === 0) {
-      return;
-    }
-    mkdirSync(this.#dir, { recursive: true });
-    const byMonth = new Map<string, string[]>();
-    for (const item of spends) {
-      const key = monthKey(item.t);
-      byMonth.set(key, [...(byMonth.get(key) ?? []), JSON.stringify(item)]);
-    }
-    // One append per file: O_APPEND keeps lines from concurrent processes whole.
-    for (const [key, lines] of byMonth) {
-      appendFileSync(join(this.#dir, `${key}.jsonl`), `${lines.join("\n")}\n`);
-    }
-  }
-
-  /** Spend recorded at or after `from`. Unreadable lines are skipped. */
-  public since(from: number, now: number): Spend[] {
-    const result: Spend[] = [];
-    const start = new Date(from);
-    for (let month = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1); month <= now;) {
-      const file = join(this.#dir, `${monthKey(month)}.jsonl`);
-      if (existsSync(file)) {
-        for (const line of readFileSync(file, "utf8").split("\n")) {
-          const item = parseLine(line);
-          if (item !== undefined && item.t >= from) {
-            result.push(item);
-          }
-        }
-      }
-      const date = new Date(month);
-      month = Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1);
-    }
-    return result;
-  }
-}
-
-function parseLine(line: string): Spend | undefined {
-  if (line.trim() === "") {
-    return undefined;
-  }
-  try {
-    const value: unknown = JSON.parse(line);
-    return Check(SpendSchema, value) ? value : undefined;
-  } catch {
-    return undefined;
+    super(dir, (value): value is Spend => Check(SpendSchema, value));
   }
 }
 

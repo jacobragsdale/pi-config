@@ -6,6 +6,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 
 - **Copilot defaults:** GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $40 a day and $100 a week, with your spend shown in pi's footer. See [Spending limits](#spending-limits).
+- **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
 - **System prompt:** a short team prompt that replaces pi's default, plus an `agent-cli` skill pi loads only when a task needs it. See [System prompt](#system-prompt).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
@@ -74,6 +75,22 @@ To change your limits, create `~/.pi/agent/budget.json` with only the values you
 
 The other settings are `warnAt` (default `0.8`) and `continueStep` (default `0.25`). If `budget.json` is invalid, pi shows an error and the limits are off until you fix it.
 
+## Cache expiry
+
+Each request reuses the previous one's prompt from the provider's cache at about a tenth of the price, but only while the cache lasts. Come back after it has expired and your next prompt re-sends the whole conversation at full price. Pi's footer shows where you stand:
+
+| Footer                                   | Meaning                                                                                    |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `cache warm · ~18m left`                 | The cache is known to last at least this long for this model.                              |
+| `cache may be cold · if expired ≈ $0.90` | Past the longest gap known to hit, but no expiry has been seen this soon.                  |
+| `cache cold · resend ≈ $0.90`            | Past a gap at which the cache has expired before, or you switched model or thinking level. |
+
+The dollar figure is what the next prompt costs to re-send the conversation uncached. If that is more than the work left is worth, `/new` starts a fresh session. Nothing is sent to keep the cache warm: pi's own cache warming stays at its default, which only refreshes during a running task.
+
+How long a cache lasts depends on the model, and Copilot doesn't publish it, so pi measures it. Every two consecutive requests in a session show whether the cache survived the gap between them. Pi starts from the published lifetimes in `extensions/cache-expiry/defaults.json` (5 minutes for Claude, at least 30 for GPT-5.6 and later) and moves them as measurements come in. One hit after a longer gap raises the estimate, since a cache can't be read once it has expired; lowering it takes two expiries, since an expiry can have other causes. Gaps under a minute aren't counted. `/cache` shows each model's estimate and how many measurements it rests on.
+
+Measurements are logged in `~/.pi/agent/cache-observations/`, one file per month, shared by every pi session on the machine; only the last 30 days count. The first time it runs, pi fills the log from the sessions in `~/.pi/agent/sessions/`, reading only their timestamps and token counts.
+
 ## Sharing prompts
 
 Run `/submit-prompt` in a session whose prompts you'd like the team to see, whether they worked well or not. Nothing is shared unless you run it.
@@ -118,6 +135,7 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Model context caps or price fixes | `agent/models.json`, then run `npm run check-prices`           |
 | Copilot prices                    | `data/copilot-prices.json` (copied from GitHub's pricing page) |
 | Team spending limits              | `extensions/budget/defaults.json`                              |
+| Published cache lifetimes         | `extensions/cache-expiry/defaults.json`                        |
 | Team system prompt                | `agent/SYSTEM.md`                                              |
 | Skills                            | `skills/<name>/SKILL.md`                                       |
 | Extensions                        | `extensions/<name>/index.ts`                                   |

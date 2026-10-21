@@ -1,0 +1,7 @@
+{
+  "lifetimes": [
+    { "models": "^claude-", "warmMinutes": 5, "coldMinutes": 6, "source": "Anthropic's default cache lasts 5 minutes" },
+    { "models": "^gpt-(5\\.([6-9]|[1-9][0-9])|[6-9]|[1-9][0-9])\\b", "warmMinutes": 30, "source": "OpenAI keeps GPT-5.6 and later for at least 30 minutes" },
+    { "models": "^gpt-", "warmMinutes": 5, "coldMinutes": 60, "source": "OpenAI keeps older GPT models 5-10 minutes, at most an hour" }
+  ]
+}
