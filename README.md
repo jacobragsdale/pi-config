@@ -8,7 +8,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 - **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
 - **Cheaper compaction (off):** an extension that can write compaction summaries with a cheaper model. It is off for the team because GPT-6 Luna's summaries lost too much in testing. See [Cheaper compaction](#cheaper-compaction).
-- **System prompt:** a short team prompt that replaces pi's default, plus an `agent-cli` skill pi loads only when a task needs it. See [System prompt](#system-prompt).
+- **System prompt:** a short prompt that replaces pi's default, with rules for reaching work systems through agent-cli. See [System prompt](#system-prompt).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
 - **Update checks:** once a day, pi checks this clone for new commits and tells you to run `/pi-config-update`.
@@ -47,13 +47,13 @@ To turn off the daily check, set `PI_CONFIG_UPDATE_CHECK=0`.
 
 ## System prompt
 
-`agent/SYSTEM.md` replaces pi's default system prompt with the team's working rules: read before editing, verify with the project's own checks, make the smallest change, never commit unless asked. Pi still adds the tool list, skills, the repo's `AGENTS.md` and the working directory after it.
+`agent/SYSTEM.md` replaces pi's default system prompt with these working rules: read before editing, verify with the project's own checks, make the smallest change, never commit unless asked, run Python through uv. Pi still adds the tool list, skills, the repo's `AGENTS.md` and the working directory after it.
 
-Measured on GPT-6.1 Sol's tokenizer, the fixed part of each request (system prompt plus tool definitions) is 1,186 tokens with the team prompt, against 1,563 with pi's default. That costs about $0.003 to cache once per session and about $0.0001 per request after that.
+It also tells pi to reach Azure DevOps, Azure, Kubernetes, databases and other work systems through [agent-cli](https://github.com/jacobragsdale/agent-cli), and to ask before falling back to az, kubectl, sqlcmd or curl. Pi runs agent-cli writes with `--dry-run` first, and never adds `--yes` (destructive changes) or `--reveal` (secrets) unless you asked for that exact action.
+
+The prompt is read from the cache on every request after the first, so its length costs little: 1,000 tokens of it cost about $0.0001 per request on GPT-6.1 Sol, and a tenth of that on Claude Haiku 5.5.
 
 To add your own instructions, write them in `~/.pi/agent/APPEND_SYSTEM.md`; pi adds that file after the team prompt, and `install.sh` never touches it. If you already had a `SYSTEM.md`, `install.sh` keeps yours instead of the team's.
-
-The `agent-cli` skill in `skills/` tells pi how to reach Azure DevOps, Azure, Kubernetes, databases and other work systems through [agent-cli](https://github.com/jacobragsdale/agent-cli). Only its one-line description is in each request; pi reads the rest when a task calls for it.
 
 ## Spending limits
 
@@ -152,7 +152,7 @@ The repo is public, so the folder's path isn't in it. In the team's private copy
 
 ### Reviewing submissions
 
-Read the files straight from the shared folder. When a prompt is worth reusing, turn it into a pi prompt template in this repo's `prompts/` folder and open a pull request; everyone gets it with their next update.
+Read the files straight from the shared folder.
 
 ### What pi itself can upload
 
@@ -174,7 +174,6 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Published cache lifetimes         | `extensions/cache-expiry/defaults.json`                        |
 | Team compaction model             | `extensions/cheap-compaction/defaults.json`                    |
 | Team system prompt                | `agent/SYSTEM.md`                                              |
-| Skills                            | `skills/<name>/SKILL.md`                                       |
 | Extensions                        | `extensions/<name>/index.ts`                                   |
 
 This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits.

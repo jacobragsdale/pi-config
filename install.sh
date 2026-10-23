@@ -29,6 +29,6 @@ if [[ -f $repo/agent/SYSTEM.md ]]; then
   fi
 fi
 
-# Load extensions and prompts from this clone in place.
+# Load extensions from this clone in place.
 PI_CODING_AGENT_DIR=$agent pi install "$repo"
 echo "Done. Restart pi, or run /reload in a running session."
