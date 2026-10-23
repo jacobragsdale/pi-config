@@ -7,15 +7,20 @@
  * at `warnAt` of a limit, and once a limit is reached pi asks before sending
  * another prompt or request. "Continue anyway" allows `continueStep` of the
  * limit more before asking again. Without a UI (pi -p) the run stops instead.
+ * /budget also breaks the month's spend down from the saved sessions.
  *
  * Team limits: defaults.json. Personal overrides: <agent dir>/budget.json.
  */
+import { statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { dollars } from "../../src/dollars.ts";
-import { Ledger, earliestStart, entrySpend, loadConfig, windowStatuses } from "./ledger.ts";
+import { readSession, sessionFiles } from "../../src/sessions.ts";
+import { breakdown, formatBreakdown } from "./breakdown.ts";
+import type { Threshold } from "./breakdown.ts";
+import { Ledger, earliestStart, entrySpend, loadConfig, windowStart, windowStatuses } from "./ledger.ts";
 import type { BudgetConfig, BudgetWindow, Spend, WindowStatus } from "./ledger.ts";
 
 const teamConfigPath = join(dirname(fileURLToPath(import.meta.url)), "defaults.json");
@@ -23,6 +28,14 @@ const personalConfigPath = (): string => join(getAgentDir(), "budget.json");
 
 const span = (hours: number): string => (hours % 24 === 0 ? `${String(hours / 24)} day(s)` : `${String(hours)} hour(s)`);
 const period = (window: BudgetWindow): string => ("hours" in window ? `in the last ${span(window.hours)}` : "this month");
+
+function modifiedSince(file: string, from: number): boolean {
+  try {
+    return statSync(file).mtimeMs >= from;
+  } catch {
+    return false;
+  }
+}
 
 export default function budget(pi: ExtensionAPI): void {
   /** Session entries already counted, so each call is logged once. */
@@ -169,8 +182,24 @@ export default function budget(pi: ExtensionAPI): void {
     recordNewSpend(ctx);
   });
 
+  /** This month's spend in the saved sessions, broken down, as report lines. */
+  function monthReport(ctx: ExtensionContext, now: number): string[] {
+    const from = windowStart({ calendar: "month", usd: null }, now);
+    const logged = ledger()
+      .since(from, now)
+      .reduce((sum, item) => sum + item.usd, 0);
+    const sessions = sessionFiles(join(getAgentDir(), "sessions"))
+      .filter((file) => modifiedSince(file, from))
+      .map(readSession);
+    const threshold: Threshold = (provider, id) => {
+      const tiers = ctx.modelRegistry.find(provider, id)?.cost.tiers ?? [];
+      return tiers.length === 0 ? undefined : Math.min(...tiers.map((tier) => tier.inputTokensAbove));
+    };
+    return formatBreakdown(breakdown(sessions, from, threshold), logged);
+  }
+
   pi.registerCommand("budget", {
-    description: "Show spend against your budget limits",
+    description: "Show spend against your budget limits, and where this month's went",
     handler: (_args, ctx) => {
       const state = update(ctx);
       if (state === undefined) {
@@ -183,16 +212,7 @@ export default function budget(pi: ExtensionAPI): void {
         const extra = allowance.get(w.name);
         return `${w.name}: ${dollars(w.spent)} ${period(w.window)}, ${limit}${pace}${extra === undefined ? "" : ` (+${dollars(extra)} allowed this session)`}`;
       });
-      const from = earliestStart(state.cfg, now);
-      const byModel = new Map<string, number>();
-      for (const item of ledger().since(from, now)) {
-        byModel.set(item.model, (byModel.get(item.model) ?? 0) + item.usd);
-      }
-      const top = [...byModel].sort((a, b) => b[1] - a[1]).slice(0, 5);
-      if (top.length > 0) {
-        lines.push(`Top models since ${new Date(from).toLocaleString()}:`, ...top.map(([model, usd]) => `  ${model} ${dollars(usd)}`));
-      }
-      lines.push(`Limits: ${personalConfigPath()} (overrides the team defaults)`);
+      lines.push("", ...monthReport(ctx, now), "", `Limits: ${personalConfigPath()} (overrides the team defaults)`);
       ctx.ui.notify(lines.join("\n"), "info");
       return Promise.resolve();
     }

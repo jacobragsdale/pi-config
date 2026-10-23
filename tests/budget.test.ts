@@ -144,18 +144,20 @@ await test("turns limits off with an error when budget.json is invalid", async (
   assert.equal(pi.notices().filter((n) => n.startsWith("Budget limits are off until this is fixed:")).length, 1);
 });
 
-await test("shows spend by window and model with /budget", async () => {
+await test("shows spend by window, and the month's broken down from saved sessions, with /budget", async () => {
   const agentDir = makeAgentDir();
   seed(agentDir, [{ usd: 3, hoursAgo: 0 }]);
-  const { pi } = start(agentDir);
+  const { pi } = start(agentDir, {}, ["--session-dir", join(agentDir, "sessions")]);
   await pi.prompt("hello");
   const from = pi.records.length;
   await pi.prompt("/budget");
-  const report = pi.notices(from).at(-1) ?? "";
-  assert.match(report, /^day: \$4\.00 in the last 1 day\(s\), limit \$40\.00$/m);
-  assert.ok(report.split("\n").includes(`month: $4.00 this month, limit $500.00, on pace for ${pace(4)}`));
-  assert.match(report, /^ {2}seed\/model \$3\.00$/m);
-  assert.match(report, /^ {2}scripted\/model \$1\.00$/m);
+  const report = (pi.notices(from).at(-1) ?? "").split("\n");
+  assert.ok(report.includes("day: $4.00 in the last 1 day(s), limit $40.00"));
+  assert.ok(report.includes(`month: $4.00 this month, limit $500.00, on pace for ${pace(4)}`));
+  assert.ok(report.includes("This month in 1 saved session(s): $1.00 of the $4.00 in your spend log."));
+  assert.ok(report.includes("  new input $0.00 (0%) · cache reads $0.00 (0%) · output $1.00 (100%)"));
+  assert.ok(report.includes("    scripted/model $1.00"));
+  assert.ok(report.some((line) => /^ {4}\$1\.00 {2}.+ {2}work {2}hello$/.test(line)));
 });
 
 await test("doesn't count a resumed session's earlier replies again", async () => {

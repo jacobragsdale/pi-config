@@ -9,14 +9,15 @@
  * defaults.json. The first time it runs, it fills the log from the sessions
  * already on disk. It never sends a request of its own.
  */
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { calculateCost } from "@earendil-works/pi-ai";
 import type { Api, Model, Usage } from "@earendil-works/pi-ai";
-import { getAgentDir, migrateSessionEntries, parseSessionEntries } from "@earendil-works/pi-coding-agent";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext, SessionEntry } from "@earendil-works/pi-coding-agent";
 import { dollars } from "../../src/dollars.ts";
+import { readSession, sessionFiles } from "../../src/sessions.ts";
 import { MAX_AGE_MS, ObservationLog, duration, estimate, footer, lastRequest, loadRules, modelKey, observe, startingLifetime } from "./observations.ts";
 import type { Estimate, LastRequest, Observation, StartingLifetime } from "./observations.ts";
 
@@ -39,26 +40,6 @@ function resendUsd(model: Model<Api>, tokens: number): number {
   return calculateCost(model, usage).total;
 }
 
-function sessionFiles(dir: string): string[] {
-  try {
-    return readdirSync(dir, { recursive: true, encoding: "utf8" })
-      .filter((file) => file.endsWith(".jsonl"))
-      .map((file) => join(dir, file));
-  } catch {
-    return [];
-  }
-}
-
-function readSessionEntries(file: string): SessionEntry[] {
-  try {
-    const entries = parseSessionEntries(readFileSync(file, "utf8"));
-    migrateSessionEntries(entries);
-    return entries.filter((entry) => entry.type !== "session");
-  } catch {
-    return [];
-  }
-}
-
 /** Claim the one-time backfill for this agent directory. False when another process already has. */
 function claimBackfill(now: number): boolean {
   mkdirSync(observationDir(), { recursive: true });
@@ -78,7 +59,7 @@ function savedObservations(skip: string | undefined): Observation[] {
   const current = skip === undefined ? undefined : resolve(skip);
   return sessionFiles(join(getAgentDir(), "sessions"))
     .filter((file) => resolve(file) !== current)
-    .flatMap((file) => observe(readSessionEntries(file)));
+    .flatMap((file) => observe(readSession(file).entries));
 }
 
 interface Shown {

@@ -68,7 +68,7 @@ What happens at a limit:
 - At 80% of a limit, pi warns you once.
 - Once you reach a limit, pi asks before sending your next prompt, or before the next request of a task that is already running. **Continue anyway** lets you spend another 25% of the limit ($125 of the monthly $500) before it asks again. Declining keeps your prompt in the editor, or stops the running task.
 - In `pi -p`, which has nobody to ask, pi stops instead and prints why.
-- `/budget` shows your spend per window and your most expensive models.
+- `/budget` shows your spend per window and where this month's spend went. See [Where the month went](#where-the-month-went).
 
 The limits are soft: they rely on your confirmation, and a single request can take you a little past a limit, because a request's cost is only known once it finishes. The costs are pi's estimates from its price list; your Copilot bill is the final word.
 
@@ -81,6 +81,23 @@ To change your limits, create `~/.pi/agent/budget.json` with only the values you
 ```
 
 The other settings are `warnAt` (default `0.8`) and `continueStep` (default `0.25`). If `budget.json` is invalid, pi shows an error and the limits are off until you fix it.
+
+### Where the month went
+
+`/budget` breaks this month's spend down from the sessions saved in `~/.pi/agent/sessions/`, which record each request's tokens. Each line answers a question about what is worth cutting next:
+
+| Line                                | What it counts                                                                                   | What it tells you                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| new input                           | Prompt tokens not read from the cache, mostly tool results                                       | Whether tool output is worth trimming                |
+| cache reads                         | Prompt tokens read from the cache                                                                | How much long conversations cost to carry            |
+| output                              | Replies, thinking included, with thinking's share of output tokens where the provider reports it | Whether a lower thinking level would pay             |
+| by model                            | Spend per model; compaction summaries show as `summaries`                                        | How much of the month runs on the cheap model        |
+| cache misses                        | Uncached prompt of requests that missed the previous request's cache                             | What expired caches and model switches cost          |
+| over a long-context price threshold | Requests whose prompt passed the model's long-context price threshold                            | Whether the context caps in `agent/models.json` hold |
+| compaction                          | Summaries pi wrote when a session compacted                                                      | What compaction costs                                |
+| top sessions                        | The 10 most expensive sessions, with their folder and first prompt                               | Which kinds of task cost the most                    |
+
+The first line compares the breakdown's total with the spend log's. Sessions saved elsewhere, such as with `--session-dir` or `--no-session`, are in the spend log but not the breakdown.
 
 ## Cache expiry
 
