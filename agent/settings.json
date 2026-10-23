@@ -1,7 +1,8 @@
 {
   "defaultProvider": "github-copilot",
-  "defaultModel": "gpt-6.1-sol",
-  "modelThinkingLevels": { "github-copilot/gpt-6.1-sol": "high" },
-  "compaction": { "reserveTokens": 32768 },
+  "defaultModel": "claude-haiku-5.5",
+  "enabledModels": ["github-copilot/claude-haiku-5.5", "github-copilot/gpt-6.1-sol"],
+  "modelThinkingLevels": { "github-copilot/claude-haiku-5.5": "xhigh", "github-copilot/gpt-6.1-sol": "high" },
+  "compaction": { "reserveTokens": 32768, "modelOverrides": { "github-copilot/claude-haiku-5.5": { "reserveTokens": 16384 } } },
   "sessionShareDestination": "radius"
 }

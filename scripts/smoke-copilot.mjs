@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Check a pi-config install against real GitHub Copilot. Run it after install.sh.
 //
-//   node scripts/smoke-copilot.mjs            # one tiny request to GPT-6 Luna, well under a cent
-//   node scripts/smoke-copilot.mjs --default  # plus one to the team default (GPT-6.1 Sol, high thinking), a cent or two
+//   node scripts/smoke-copilot.mjs        # one tiny request to the default, Claude Haiku 5.5 at xhigh thinking, well under a cent
+//   node scripts/smoke-copilot.mjs --sol  # plus one to GPT-6.1 Sol at high thinking, the Ctrl+P model, a cent or two
 //
 // Exits 1 if any check fails.
 import { spawnSync } from "node:child_process";
@@ -35,9 +35,14 @@ function checkInstall() {
     if (settings[key] === team[key]) ok(`${key} is ${JSON.stringify(team[key])}`);
     else fail(`${key} is ${JSON.stringify(settings[key])}, expected ${JSON.stringify(team[key])}; run install.sh`);
   }
-  const list = run("pi", ["--list-models", "gpt-6.1-sol"]);
-  if (/github-copilot\s+gpt-6\.1-sol\s+272K/.test(list.stdout)) ok("pi caps GPT-6.1 Sol at 272K, under the long-context price");
-  else fail(`pi --list-models doesn't show github-copilot gpt-6.1-sol at 272K:\n${list.stdout}${list.stderr}`);
+  for (const [model, cap] of [
+    ["claude-haiku-5.5", "100K"],
+    ["gpt-6.1-sol", "272K"]
+  ]) {
+    const list = run("pi", ["--list-models", model]);
+    if (new RegExp(`github-copilot\\s+${model.replaceAll(".", "\\.")}\\s+${cap}`).test(list.stdout)) ok(`pi caps ${model} at ${cap}, under the long-context price`);
+    else fail(`pi --list-models doesn't show github-copilot ${model} at ${cap}:\n${list.stdout}${list.stderr}`);
+  }
 }
 
 function checkUpdates() {
@@ -108,7 +113,7 @@ console.log(`pi-config smoke test for ${agent}`);
 checkInstall();
 checkUpdates();
 checkPromptShare();
-liveRequest("gpt-6-luna", "low");
-if (process.argv.includes("--default")) liveRequest("gpt-6.1-sol", "high");
+liveRequest("claude-haiku-5.5", "xhigh");
+if (process.argv.includes("--sol")) liveRequest("gpt-6.1-sol", "high");
 console.log(failures === 0 ? "All checks passed." : `${failures} check(s) failed.`);
 process.exitCode = failures === 0 ? 0 : 1;

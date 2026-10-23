@@ -4,7 +4,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 
 ## What it sets up
 
-- **Copilot defaults:** GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
+- **Copilot defaults:** Claude Haiku 5.5 with xhigh thinking, Ctrl+P to switch to GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
 - **Cheaper compaction (off):** an extension that can write compaction summaries with a cheaper model. It is off for the team because GPT-6 Luna's summaries lost too much in testing. See [Cheaper compaction](#cheaper-compaction).
@@ -185,7 +185,7 @@ This repo is public: don't commit company names, internal URLs, hostnames or pat
 node ~/pi-config/scripts/smoke-copilot.mjs
 ```
 
-It checks the install and makes one tiny request to GitHub Copilot, well under a cent. Add `--default` to also try the team default model.
+It checks the install and makes one tiny request to GitHub Copilot's Claude Haiku 5.5, well under a cent. Add `--sol` to also try GPT-6.1 Sol, the model Ctrl+P switches to.
 
 ## Develop
 

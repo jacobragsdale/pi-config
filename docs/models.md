@@ -4,20 +4,27 @@ Copilot bills pi's requests per token, in AI credits (1 credit = $0.01). This pa
 
 ## Team defaults
 
-| Setting                    | Value                                  | Why                                                                                                          |
-| -------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Model                      | `github-copilot/gpt-6.1-sol`           | Team choice for everyday work.                                                                               |
-| Thinking                   | `high` for GPT-6.1 Sol                 | Set per model in `modelThinkingLevels`, so switching to a cheaper model doesn't carry high thinking with it. |
-| Context window             | Capped at each model's price threshold | See below.                                                                                                   |
-| `compaction.reserveTokens` | `32768`                                | Starts compaction early enough that one large tool result can't push a request over the threshold.           |
+| Setting                    | Value                                                       | Why                                                                                                   |
+| -------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Model                      | `github-copilot/claude-haiku-5.5`                           | About a twentieth of GPT-6.1 Sol's price per task. See [Start cheap](#start-cheap).                   |
+| Ctrl+P                     | Switches between Haiku 5.5 and `github-copilot/gpt-6.1-sol` | Set in `enabledModels`. Sol is for the tasks Haiku can't do.                                          |
+| Thinking                   | `xhigh` for Haiku 5.5, `high` for GPT-6.1 Sol               | Set per model in `modelThinkingLevels`, so each model keeps its own level when you switch.            |
+| Context window             | Capped at each model's price threshold                      | See below.                                                                                            |
+| `compaction.reserveTokens` | `32768`; `16384` for Haiku 5.5                              | Compacts at about 239K tokens on Sol and 84K on Haiku, under their price thresholds of 272K and 100K. |
 
-Switch models for one session with `/model`. Thinking tokens bill as output, so `high` costs more per task than the figures below on tasks where the model thinks a lot.
+`/model` picks any other model for one session. Thinking tokens bill as output, so `high` and `xhigh` cost more per task than the figures below on tasks where the model thinks a lot. On Haiku that is $0.50 per million tokens, so its `xhigh` costs time more than money.
+
+## Start cheap
+
+Starting a session on Haiku and switching up costs little when the task turns out to need Sol. The prompt cache is per model, so Sol's first request writes the whole conversation to its cache once: about what Sol would have paid had it done that work itself. The extra cost is what Haiku spent, around 5% of Sol's price. Tasks Haiku finishes cost about 95% less.
+
+Switching the other way, from Sol down to Haiku, pays only if you finish on Haiku. Everything Haiku adds, such as file reads and test output, is billed again at Sol's rate when you switch back.
 
 ## Why the context windows are capped
 
-Several models charge about double for a request whose input goes over a threshold: 272K tokens for GPT-6.x and GPT-5.6 Sol and Terra, 200K for GPT-5.6 Luna and Grok, and 100K for Claude Haiku 5.5. Pi's catalog gives these models windows of up to 1.05M tokens, so without a cap pi lets a long session grow past the threshold before it compacts, and every request after that pays the higher rate.
+Several models charge more for a request whose input goes over a threshold, about double on most and five times on Claude Haiku 5.5: 272K tokens for GPT-6.x and GPT-5.6 Sol and Terra, 200K for GPT-5.6 Luna and Grok, and 100K for Claude Haiku 5.5. Pi's catalog gives these models windows of up to 1.05M tokens, so without a cap pi lets a long session grow past the threshold before it compacts, and every request after that pays the higher rate.
 
-`agent/models.json` sets each tiered model's `contextWindow` to its threshold. Pi compacts at the window minus `reserveTokens`, about 239K for GPT-6.1 Sol, so requests stay at the standard rate. On an hour-long GPT-6.1 Sol task that is the difference between about $9.40 and $16.80.
+`agent/models.json` sets each tiered model's `contextWindow` to its threshold. Pi compacts at the window minus `reserveTokens`, about 239K for GPT-6.1 Sol and 84K for Claude Haiku 5.5, so requests stay at the standard rate. On an hour-long GPT-6.1 Sol task that is the difference between about $9.40 and $16.80.
 
 Compaction summarizes older turns, and a summary can drop details of a long task's progress. If a long task loses track after a compaction, say what is left to do.
 

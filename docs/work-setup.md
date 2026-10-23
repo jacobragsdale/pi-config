@@ -65,10 +65,10 @@ Start pi, run `/login`, and choose GitHub Copilot.
 ## 5. Run the smoke test
 
 ```bash
-node ~/pi-config/scripts/smoke-copilot.mjs --default
+node ~/pi-config/scripts/smoke-copilot.mjs --sol
 ```
 
-It checks the install, the update check's access to Azure DevOps, the shared folder, and one real request each to GPT-6 Luna and to GPT-6.1 Sol with high thinking. Together these cost a cent or two. A failed check prints what to fix.
+It checks the install, the update check's access to Azure DevOps, the shared folder, and one real request each to Claude Haiku 5.5 with xhigh thinking and to GPT-6.1 Sol with high thinking. Together these cost a cent or two. A failed check prints what to fix.
 
 Things only this step can confirm:
 
@@ -87,5 +87,5 @@ Each teammate:
 ## 7. Watch the first week
 
 - **Costs:** compare a few days of `/budget` totals with the team's Copilot usage report. Pi's costs are estimates from its price list, so a steady gap means a price in `agent/models.json` or `data/copilot-prices.json` needs fixing.
-- **Compaction:** GPT-6.1 Sol compacts at about 239K tokens to stay under the 272K price threshold. Watch whether long tasks lose track after a compaction.
+- **Compaction:** Claude Haiku 5.5 compacts at about 84K tokens to stay under its 100K price threshold, and GPT-6.1 Sol at about 239K to stay under 272K. Watch whether long tasks lose track after a compaction.
 - **pi upgrades:** after each one, run `npm run check-prices` in the repo to catch price or model changes.
