@@ -1,6 +1,6 @@
 /**
- * Test-only provider with models "scripted/model" and a cheaper
- * "scripted/cheap". Each reply costs SCRIPTED_COST dollars (default 1). The
+ * Test-only provider with the model "scripted/model". Each reply costs
+ * SCRIPTED_COST dollars (default 1). The
  * first SCRIPTED_TOOL_TURNS replies of a process call bash, so one prompt
  * makes several requests. Every request that gets past
  * before_provider_request is logged in SCRIPTED_LOG as a line with its number
@@ -61,10 +61,7 @@ export default function scriptedProvider(pi: ExtensionAPI): void {
     baseUrl: "http://scripted.invalid",
     apiKey: "scripted",
     api: "scripted",
-    models: [
-      { id: "model", name: "Scripted", reasoning: false, input: ["text"], cost: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100_000, maxTokens: 1000 },
-      { id: "cheap", name: "Scripted cheap", reasoning: false, input: ["text"], cost: { input: 0.1, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100_000, maxTokens: 1000 }
-    ],
+    models: [{ id: "model", name: "Scripted", reasoning: false, input: ["text"], cost: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 100_000, maxTokens: 1000 }],
     streamSimple: (model, _context, options) => {
       const stream = createAssistantMessageEventStream();
       respond(model, options, stream).catch((err: unknown) => {

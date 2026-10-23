@@ -7,7 +7,6 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 - **Copilot defaults:** Claude Haiku 5.5 with xhigh thinking, Ctrl+P to switch to GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
-- **Cheaper compaction (off):** an extension that can write compaction summaries with a cheaper model. It is off for the team because GPT-6 Luna's summaries lost too much in testing. See [Cheaper compaction](#cheaper-compaction).
 - **System prompt:** a short prompt that replaces pi's default, with rules for reaching work systems through agent-cli. See [System prompt](#system-prompt).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
@@ -115,18 +114,6 @@ How long a cache lasts depends on the model, and Copilot doesn't publish it, so 
 
 Measurements are logged in `~/.pi/agent/cache-observations/`, one file per month, shared by every pi session on the machine; only the last 30 days count. The first time it runs, pi fills the log from the sessions in `~/.pi/agent/sessions/`, reading only their timestamps and token counts.
 
-## Cheaper compaction
-
-When a session compacts, pi asks the session's own model to summarize the older part of the conversation. The `cheap-compaction` extension can give that job to a cheaper model. It is **off for the team**: in a blind evaluation against Sonnet 5.5, GPT-6 Luna's summaries left out details the session needed next, and a compaction on Sonnet or GPT-6.1 Sol only costs about $0.06. [docs/compaction-eval.md](docs/compaction-eval.md) has the method and results.
-
-It can still pay when your session runs on a much more expensive model than one that summarizes well, such as Claude Opus or Fable summarized by Sonnet 5.5. To turn it on, create `~/.pi/agent/compaction.json`:
-
-```json
-{ "model": "github-copilot/claude-sonnet-5.5", "thinkingLevel": "high" }
-```
-
-The summary uses pi's own prompts and format; only the model changes. Pi compacts with the session's model as usual when the chosen model isn't available, isn't cheaper per input token than the session's, can't fit the compaction, or fails. A notice says which model compacted and what it cost. Stopping a compaction cancels it rather than retrying on the session's model. `PI_CHEAP_COMPACTION=0` turns it off for one run.
-
 ## Sharing prompts
 
 Run `/submit-prompt` in a session whose prompts you'd like the team to see, whether they worked well or not. Nothing is shared unless you run it.
@@ -172,7 +159,6 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Copilot prices                    | `data/copilot-prices.json` (copied from GitHub's pricing page) |
 | Team spending limits              | `extensions/budget/defaults.json`                              |
 | Published cache lifetimes         | `extensions/cache-expiry/defaults.json`                        |
-| Team compaction model             | `extensions/cheap-compaction/defaults.json`                    |
 | Team system prompt                | `agent/SYSTEM.md`                                              |
 | Extensions                        | `extensions/<name>/index.ts`                                   |
 
