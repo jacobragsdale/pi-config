@@ -1,8 +1,9 @@
 /**
- * Soft spending limits over rolling time windows.
+ * Soft spending limits over rolling time windows and the calendar month.
  *
  * Every billed model call is written to a spend log shared by all pi processes
- * on the machine. The footer shows spend against each limit, a warning appears
+ * on the machine. The footer shows spend against each limit, with the pace a
+ * calendar month is on, a warning appears
  * at `warnAt` of a limit, and once a limit is reached pi asks before sending
  * another prompt or request. "Continue anyway" allows `continueStep` of the
  * limit more before asking again. Without a UI (pi -p) the run stops instead.
@@ -14,13 +15,14 @@ import { fileURLToPath } from "node:url";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { dollars } from "../../src/dollars.ts";
-import { Ledger, entrySpend, loadConfig, longestWindowHours, windowStatuses } from "./ledger.ts";
-import type { BudgetConfig, Spend, WindowStatus } from "./ledger.ts";
+import { Ledger, earliestStart, entrySpend, loadConfig, windowStatuses } from "./ledger.ts";
+import type { BudgetConfig, BudgetWindow, Spend, WindowStatus } from "./ledger.ts";
 
 const teamConfigPath = join(dirname(fileURLToPath(import.meta.url)), "defaults.json");
 const personalConfigPath = (): string => join(getAgentDir(), "budget.json");
 
 const span = (hours: number): string => (hours % 24 === 0 ? `${String(hours / 24)} day(s)` : `${String(hours)} hour(s)`);
+const period = (window: BudgetWindow): string => ("hours" in window ? `in the last ${span(window.hours)}` : "this month");
 
 export default function budget(pi: ExtensionAPI): void {
   /** Session entries already counted, so each call is logged once. */
@@ -67,11 +69,14 @@ export default function budget(pi: ExtensionAPI): void {
 
   function statuses(cfg: BudgetConfig): WindowStatus[] {
     const now = Date.now();
-    return windowStatuses(cfg, ledger().since(now - longestWindowHours(cfg) * 3_600_000, now), now);
+    return windowStatuses(cfg, ledger().since(earliestStart(cfg, now), now), now);
   }
 
   function showStatus(ctx: ExtensionContext, current: readonly WindowStatus[]): void {
-    const parts = current.map((w) => (w.limit === null ? `${w.name} ${dollars(w.spent)}` : `${w.name} ${dollars(w.spent)}/${dollars(w.limit)}`));
+    const parts = current.map((w) => {
+      const spend = w.limit === null ? `${w.name} ${dollars(w.spent)}` : `${w.name} ${dollars(w.spent)}/${dollars(w.limit)}`;
+      return w.pace === undefined ? spend : `${spend} · pace ${dollars(w.pace)}`;
+    });
     ctx.ui.setStatus("budget", parts.join(" · "));
   }
 
@@ -93,7 +98,7 @@ export default function budget(pi: ExtensionAPI): void {
         over.push(w);
       } else if (w.spent >= w.limit * cfg.warnAt && !warned.has(w.name)) {
         warned.add(w.name);
-        ctx.ui.notify(`Budget: ${dollars(w.spent)} of your ${dollars(w.limit)} ${w.name} limit spent in the last ${span(w.hours)}.`, "warning");
+        ctx.ui.notify(`Budget: ${dollars(w.spent)} of your ${dollars(w.limit)} ${w.name} limit spent ${period(w.window)}.`, "warning");
       }
     }
     return { cfg, over };
@@ -108,7 +113,7 @@ export default function budget(pi: ExtensionAPI): void {
     for (const w of state.over) {
       // `update` only reports windows that have a limit.
       const limit = w.limit ?? 0;
-      const summary = `${dollars(w.spent)} of your ${dollars(limit)} ${w.name} limit spent in the last ${span(w.hours)}`;
+      const summary = `${dollars(w.spent)} of your ${dollars(limit)} ${w.name} limit spent ${period(w.window)}`;
       if (!ctx.hasUI) {
         console.error(`pi budget: stopped, ${summary}. Raise the limit in ${personalConfigPath()}.`);
         return false;
@@ -174,17 +179,18 @@ export default function budget(pi: ExtensionAPI): void {
       const now = Date.now();
       const lines = statuses(state.cfg).map((w) => {
         const limit = w.limit === null ? "no limit" : `limit ${dollars(w.limit)}`;
+        const pace = w.pace === undefined ? "" : `, on pace for ${dollars(w.pace)}`;
         const extra = allowance.get(w.name);
-        return `${w.name}: ${dollars(w.spent)} in the last ${span(w.hours)}, ${limit}${extra === undefined ? "" : ` (+${dollars(extra)} allowed this session)`}`;
+        return `${w.name}: ${dollars(w.spent)} ${period(w.window)}, ${limit}${pace}${extra === undefined ? "" : ` (+${dollars(extra)} allowed this session)`}`;
       });
-      const hours = longestWindowHours(state.cfg);
+      const from = earliestStart(state.cfg, now);
       const byModel = new Map<string, number>();
-      for (const item of ledger().since(now - hours * 3_600_000, now)) {
+      for (const item of ledger().since(from, now)) {
         byModel.set(item.model, (byModel.get(item.model) ?? 0) + item.usd);
       }
       const top = [...byModel].sort((a, b) => b[1] - a[1]).slice(0, 5);
       if (top.length > 0) {
-        lines.push(`Top models, last ${span(hours)}:`, ...top.map(([model, usd]) => `  ${model} ${dollars(usd)}`));
+        lines.push(`Top models since ${new Date(from).toLocaleString()}:`, ...top.map(([model, usd]) => `  ${model} ${dollars(usd)}`));
       }
       lines.push(`Limits: ${personalConfigPath()} (overrides the team defaults)`);
       ctx.ui.notify(lines.join("\n"), "info");

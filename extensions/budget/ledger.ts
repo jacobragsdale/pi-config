@@ -7,7 +7,14 @@ import { parseJson, validate } from "../../src/json.ts";
 import { MonthlyLog } from "../../src/monthly-log.ts";
 import { entryCost } from "../../src/usage.ts";
 
-const WindowSchema = Type.Object({ hours: Type.Number({ exclusiveMinimum: 0 }), usd: Type.Union([Type.Number({ minimum: 0 }), Type.Null()]) }, { additionalProperties: false });
+const HOUR = 3_600_000;
+
+const LimitSchema = Type.Union([Type.Number({ minimum: 0 }), Type.Null()]);
+/** The last `hours`, or the calendar month so far in local time. */
+const WindowSchema = Type.Union([
+  Type.Object({ hours: Type.Number({ exclusiveMinimum: 0 }), usd: LimitSchema }, { additionalProperties: false }),
+  Type.Object({ calendar: Type.Literal("month"), usd: LimitSchema }, { additionalProperties: false })
+]);
 
 const ConfigSchema = Type.Object(
   { windows: Type.Record(Type.String(), WindowSchema), warnAt: Type.Number({ exclusiveMinimum: 0, maximum: 1 }), continueStep: Type.Number({ exclusiveMinimum: 0 }) },
@@ -18,7 +25,10 @@ const ConfigSchema = Type.Object(
 const PersonalSchema = Type.Object(
   {
     windows: Type.Optional(
-      Type.Record(Type.String(), Type.Object({ hours: Type.Optional(WindowSchema.properties.hours), usd: Type.Optional(WindowSchema.properties.usd) }, { additionalProperties: false }))
+      Type.Record(
+        Type.String(),
+        Type.Object({ hours: Type.Optional(Type.Number({ exclusiveMinimum: 0 })), calendar: Type.Optional(Type.Literal("month")), usd: Type.Optional(LimitSchema) }, { additionalProperties: false })
+      )
     ),
     warnAt: Type.Optional(ConfigSchema.properties.warnAt),
     continueStep: Type.Optional(ConfigSchema.properties.continueStep)
@@ -27,6 +37,7 @@ const PersonalSchema = Type.Object(
 );
 
 export type BudgetConfig = Static<typeof ConfigSchema>;
+export type BudgetWindow = Static<typeof WindowSchema>;
 
 export function loadConfig(teamPath: string, personalPath: string): BudgetConfig {
   const team = parseJson(ConfigSchema, readFileSync(teamPath, "utf8"), teamPath);
@@ -61,19 +72,38 @@ export class Ledger extends MonthlyLog<Spend> {
 
 export interface WindowStatus {
   readonly name: string;
-  readonly hours: number;
+  readonly window: BudgetWindow;
   readonly limit: number | null;
   readonly spent: number;
+  /** For a calendar month: the spend so far projected over the whole month. */
+  readonly pace: number | undefined;
+}
+
+/** Where a window starts: `hours` before now, or local midnight on the 1st of this month. */
+export function windowStart(window: BudgetWindow, now: number): number {
+  if ("hours" in window) {
+    return now - window.hours * HOUR;
+  }
+  const date = new Date(now);
+  return new Date(date.getFullYear(), date.getMonth(), 1).getTime();
+}
+
+/** A month's spend so far projected over the whole month, counting today as a full day. */
+export function monthPace(spent: number, now: number): number {
+  const date = new Date(now);
+  const days = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  return (spent / date.getDate()) * days;
 }
 
 export function windowStatuses(config: BudgetConfig, spends: readonly Spend[], now: number): WindowStatus[] {
   return Object.entries(config.windows).map(([name, window]) => {
-    const from = now - window.hours * 3_600_000;
+    const from = windowStart(window, now);
     const spent = spends.filter((item) => item.t >= from).reduce((sum, item) => sum + item.usd, 0);
-    return { name, hours: window.hours, limit: window.usd, spent };
+    return { name, window, limit: window.usd, spent, pace: "calendar" in window ? monthPace(spent, now) : undefined };
   });
 }
 
-export function longestWindowHours(config: BudgetConfig): number {
-  return Math.max(0, ...Object.values(config.windows).map((window) => window.hours));
+/** Where the longest-reaching window starts, so one ledger read covers them all. */
+export function earliestStart(config: BudgetConfig, now: number): number {
+  return Math.min(now, ...Object.values(config.windows).map((window) => windowStart(window, now)));
 }

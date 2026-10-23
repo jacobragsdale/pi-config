@@ -3,6 +3,8 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
+import { monthPace } from "../extensions/budget/ledger.ts";
+import { dollars } from "../src/dollars.ts";
 import { PiRpc, isRecord, makeAgentDir, repo, requestCount, scriptedProvider } from "./pi-rpc.ts";
 
 const budgetExtension = join(repo, "extensions/budget/index.ts");
@@ -34,6 +36,9 @@ function ledgerLines(agentDir: string): unknown[] {
   );
 }
 
+/** The footer's pace for a month with `spent` so far. */
+const pace = (spent: number): string => dollars(monthPace(spent, Date.now()));
+
 const running: PiRpc[] = [];
 
 function start(agentDir: string, env: Readonly<Record<string, string>> = {}, args?: readonly string[]): { pi: PiRpc; log: string } {
@@ -55,7 +60,7 @@ await test("logs each reply's cost and shows spend in the footer", async () => {
     ledgerLines(agentDir).map((line) => (isRecord(line) ? { ...line, t: 0, session: "" } : line)),
     [{ t: 0, usd: 2.5, model: "scripted/model", kind: "reply", session: "" }]
   );
-  assert.equal(pi.lastStatus("budget"), "day $2.50/$40.00 · week $2.50/$100.00");
+  assert.equal(pi.lastStatus("budget"), `day $2.50/$40.00 · month $2.50/$500.00 · pace ${pace(2.5)}`);
 });
 
 await test("shows sub-dollar spend and limits with enough decimals to read", async () => {
@@ -63,7 +68,7 @@ await test("shows sub-dollar spend and limits with enough decimals to read", asy
   writeFileSync(join(agentDir, "budget.json"), JSON.stringify({ windows: { day: { usd: 0.05 } } }));
   const { pi } = start(agentDir, { SCRIPTED_COST: "0.0004" });
   await pi.prompt("hello");
-  assert.equal(pi.lastStatus("budget"), "day $0.0004/$0.050 · week $0.0004/$100.00");
+  assert.equal(pi.lastStatus("budget"), `day $0.0004/$0.050 · month $0.0004/$500.00 · pace ${pace(0.0004)}`);
 });
 
 await test("warns once spend passes 80% of a limit", async () => {
@@ -109,23 +114,24 @@ await test("stops a run that crosses the limit between requests", async () => {
   assert.ok(pi.notices().includes("Stopped: over budget. /budget shows your spend."));
 });
 
-await test("counts a rolling window: spend from 25 hours ago is in the week, not the day", async () => {
+await test("holds a prompt over the month limit", async () => {
   const agentDir = makeAgentDir();
-  seed(agentDir, [{ usd: 50, hoursAgo: 25 }]);
+  writeFileSync(join(agentDir, "budget.json"), JSON.stringify({ windows: { day: { usd: null }, month: { usd: 10 } } }));
+  seed(agentDir, [{ usd: 10, hoursAgo: 0 }]);
   const { pi, log } = start(agentDir);
-  await pi.prompt("hello");
-  assert.equal(requestCount(log), 1);
-  assert.equal(pi.lastStatus("budget"), "day $1.00/$40.00 · week $51.00/$100.00");
+  assert.equal(await pi.prompt("hello"), "handled");
+  assert.deepEqual(pi.confirmTitles(), ["Over your month budget"]);
+  assert.equal(requestCount(log), 0);
 });
 
 await test("applies a personal budget.json over the team limits", async () => {
   const agentDir = makeAgentDir();
-  writeFileSync(join(agentDir, "budget.json"), JSON.stringify({ windows: { day: { usd: 60 }, month: { hours: 720, usd: null } } }));
-  seed(agentDir, [{ usd: 45, hoursAgo: 1 }]);
+  writeFileSync(join(agentDir, "budget.json"), JSON.stringify({ windows: { day: { usd: 60 }, week: { hours: 168, usd: null } } }));
+  seed(agentDir, [{ usd: 45, hoursAgo: 0 }]);
   const { pi, log } = start(agentDir);
   await pi.prompt("hello");
   assert.equal(requestCount(log), 1);
-  assert.equal(pi.lastStatus("budget"), "day $46.00/$60.00 · week $46.00/$100.00 · month $46.00");
+  assert.equal(pi.lastStatus("budget"), `day $46.00/$60.00 · month $46.00/$500.00 · pace ${pace(46)} · week $46.00`);
 });
 
 await test("turns limits off with an error when budget.json is invalid", async () => {
@@ -140,14 +146,14 @@ await test("turns limits off with an error when budget.json is invalid", async (
 
 await test("shows spend by window and model with /budget", async () => {
   const agentDir = makeAgentDir();
-  seed(agentDir, [{ usd: 3, hoursAgo: 30 }]);
+  seed(agentDir, [{ usd: 3, hoursAgo: 0 }]);
   const { pi } = start(agentDir);
   await pi.prompt("hello");
   const from = pi.records.length;
   await pi.prompt("/budget");
   const report = pi.notices(from).at(-1) ?? "";
-  assert.match(report, /^day: \$1\.00 in the last 1 day\(s\), limit \$40\.00$/m);
-  assert.match(report, /^week: \$4\.00 in the last 7 day\(s\), limit \$100\.00$/m);
+  assert.match(report, /^day: \$4\.00 in the last 1 day\(s\), limit \$40\.00$/m);
+  assert.ok(report.split("\n").includes(`month: $4.00 this month, limit $500.00, on pace for ${pace(4)}`));
   assert.match(report, /^ {2}seed\/model \$3\.00$/m);
   assert.match(report, /^ {2}scripted\/model \$1\.00$/m);
 });

@@ -5,7 +5,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 ## What it sets up
 
 - **Copilot defaults:** GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
-- **Spending limits:** soft limits of $40 a day and $100 a week, with your spend shown in pi's footer. See [Spending limits](#spending-limits).
+- **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
 - **Cheaper compaction (off):** an extension that can write compaction summaries with a cheaper model. It is off for the team because GPT-6 Luna's summaries lost too much in testing. See [Cheaper compaction](#cheaper-compaction).
 - **System prompt:** a short team prompt that replaces pi's default, plus an `agent-cli` skill pi loads only when a task needs it. See [System prompt](#system-prompt).
@@ -57,10 +57,16 @@ The `agent-cli` skill in `skills/` tells pi how to reach Azure DevOps, Azure, Ku
 
 ## Spending limits
 
-Pi's footer shows what you have spent in each window against its limit, for example `day $3.10/$40.00 · week $12.40/$100.00`. The windows are rolling: "day" is the last 24 hours, not the calendar day.
+Pi's footer shows what you have spent in each window against its limit, for example `day $3.10/$40.00 · month $212.00/$500.00 · pace $455.00`.
+
+- "month" is the calendar month in local time, starting fresh on the 1st. It is the main limit.
+- "pace" is what the month will cost if you carry on as you have so far: the month's spend divided by today's date, times the days in the month.
+- "day" is the last 24 hours, not the calendar day. It catches a single runaway session.
+
+What happens at a limit:
 
 - At 80% of a limit, pi warns you once.
-- Once you reach a limit, pi asks before sending your next prompt, or before the next request of a task that is already running. **Continue anyway** lets you spend another 25% of the limit ($10 of the daily $40) before it asks again. Declining keeps your prompt in the editor, or stops the running task.
+- Once you reach a limit, pi asks before sending your next prompt, or before the next request of a task that is already running. **Continue anyway** lets you spend another 25% of the limit ($125 of the monthly $500) before it asks again. Declining keeps your prompt in the editor, or stops the running task.
 - In `pi -p`, which has nobody to ask, pi stops instead and prints why.
 - `/budget` shows your spend per window and your most expensive models.
 
@@ -68,10 +74,10 @@ The limits are soft: they rely on your confirmation, and a single request can ta
 
 Spend is logged in `~/.pi/agent/spend/`, one file per month, shared by every pi session on the machine. Each machine keeps its own log.
 
-To change your limits, create `~/.pi/agent/budget.json` with only the values you want to change. This raises the daily limit to $60 and adds a 30-day window with no limit, shown in the footer only:
+To change your limits, create `~/.pi/agent/budget.json` with only the values you want to change. A window is either rolling, with `hours`, or the calendar month, with `"calendar": "month"`. This raises the monthly limit to $600 and adds a rolling week with no limit, shown in the footer only:
 
 ```json
-{ "windows": { "day": { "usd": 60 }, "month": { "hours": 720, "usd": null } } }
+{ "windows": { "month": { "usd": 600 }, "week": { "hours": 168, "usd": null } } }
 ```
 
 The other settings are `warnAt` (default `0.8`) and `continueStep` (default `0.25`). If `budget.json` is invalid, pi shows an error and the limits are off until you fix it.
