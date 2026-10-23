@@ -22,7 +22,7 @@ Switching the other way, from Sol down to Haiku, pays only if you finish on Haik
 
 ## Why the context windows are capped
 
-Several models charge more for a request whose input goes over a threshold, about double on most and five times on Claude Haiku 5.5: 272K tokens for GPT-6.x and GPT-5.6 Sol and Terra, 200K for GPT-5.6 Luna and Grok, and 100K for Claude Haiku 5.5. Pi's catalog gives these models windows of up to 1.05M tokens, so without a cap pi lets a long session grow past the threshold before it compacts, and every request after that pays the higher rate.
+Several models charge more for a request whose input goes over a threshold: 272K tokens for GPT-6.x and GPT-5.6 Sol and Terra, 200K for GPT-5.6 Luna and Grok, and 100K for Claude Haiku 5.5. Above it, most charge about double and Haiku 5.5 five times as much. Pi's catalog gives these models windows of up to 1.05M tokens, so without a cap pi lets a long session grow past the threshold before it compacts, and every request after that pays the higher rate.
 
 `agent/models.json` sets each tiered model's `contextWindow` to its threshold. Pi compacts at the window minus `reserveTokens`, about 239K for GPT-6.1 Sol and 84K for Claude Haiku 5.5, so requests stay at the standard rate. On an hour-long GPT-6.1 Sol task that is the difference between about $9.40 and $16.80.
 
