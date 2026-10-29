@@ -12,7 +12,7 @@ Copilot bills pi's requests per token, in AI credits (1 credit = $0.01). This pa
 | Context window             | Capped at each model's price threshold                      | See below.                                                                                            |
 | `compaction.reserveTokens` | `32768`; `16384` for Haiku 5.5                              | Compacts at about 239K tokens on Sol and 84K on Haiku, under their price thresholds of 272K and 100K. |
 
-`/model` picks any other model for one session. Thinking tokens bill as output, so `high` and `xhigh` cost more per task than the figures below on tasks where the model thinks a lot. On Haiku that is $0.50 per million tokens, so its `xhigh` costs time more than money.
+`/model` picks any other model for one session. It opens on the two Ctrl+P models; press Tab to list every model your Copilot plan offers. Thinking tokens bill as output, so `high` and `xhigh` cost more per task than the figures below on tasks where the model thinks a lot. On Haiku that is $0.50 per million tokens, so its `xhigh` costs time more than money.
 
 ## Start cheap
 
