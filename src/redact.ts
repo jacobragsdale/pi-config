@@ -1,7 +1,8 @@
 /**
  * Masks secrets that commonly turn up in agent sessions: tokens, keys,
  * passwords in connection strings and URLs. It is a safety net, not a
- * guarantee; the person submitting still reviews the text.
+ * guarantee: /submit-prompt has the person review the text, but whatever
+ * /live misses reaches every guest.
  */
 
 interface Rule {

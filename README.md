@@ -9,6 +9,7 @@ Team settings and extensions for the [pi](https://pi.dev) coding agent, tuned fo
 - **Cache expiry:** pi's footer shows whether the prompt cache is still warm, and what re-sending the conversation costs once it has expired. See [Cache expiry](#cache-expiry).
 - **System prompt:** a short prompt that replaces pi's default, with rules for reaching work systems through agent-cli. See [System prompt](#system-prompt).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
+- **Live sessions:** `/live` streams your session to colleagues, who join with one `ssh` command and can suggest prompts that you choose whether to send. It needs a relay, which this repo also holds. See [docs/live/README.md](docs/live/README.md).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
 - **Update checks:** once a day, pi checks this clone for new commits and tells you to run `/pi-config-update`.
 
@@ -161,6 +162,7 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Published cache lifetimes         | `extensions/cache-expiry/defaults.json`                        |
 | Team system prompt                | `agent/SYSTEM.md`                                              |
 | Extensions                        | `extensions/<name>/index.ts`                                   |
+| The pi-live relay                 | `relay/`, then rebuild its image: see `docs/live/deploy.md`    |
 
 This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits.
 
@@ -182,4 +184,4 @@ npm run format:check
 npm test
 ```
 
-The tests run real pi processes in RPC mode against a scripted test provider (`tests/fixtures/scripted-provider.ts`), in throwaway agent directories. They make no network calls and cost nothing.
+The tests run real pi processes in RPC mode against a scripted test provider (`tests/fixtures/scripted-provider.ts`), in throwaway agent directories. The pi-live tests also start relays on free local ports and connect guests to them over SSH. Nothing leaves the machine, and nothing costs anything.

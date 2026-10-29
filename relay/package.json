@@ -1,0 +1,17 @@
+{
+  "name": "pi-live-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The relay that draws streamed pi sessions for guests over ssh",
+  "type": "module",
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0",
+    "ssh2": "1.17.0",
+    "typebox": "1.3.27",
+    "ws": "8.22.0"
+  }
+}
