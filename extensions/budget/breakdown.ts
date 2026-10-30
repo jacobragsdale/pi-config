@@ -12,7 +12,7 @@ import { dollars } from "../../src/dollars.ts";
 import type { SavedSession } from "../../src/sessions.ts";
 import { entryUsage } from "../../src/usage.ts";
 
-/** A miss reads at most this share of the previous request's prompt from the cache, as in cache-expiry. */
+/** A miss reads at most this share of the previous request's prompt from the cache. */
 const MISS_SHARE = 0.5;
 /** Below this, a miss can't be told apart from the part other sessions keep warm. */
 const MIN_MISS_TOKENS = 8192;

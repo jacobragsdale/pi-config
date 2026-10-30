@@ -5,10 +5,8 @@
  * makes several requests. Every request that gets past
  * before_provider_request is logged in SCRIPTED_LOG as a line with its number
  * and model id. SCRIPTED_DELAY_MS holds each reply back, so a test can abort it.
- * SCRIPTED_TOKENS, JSON such as {"cacheRead": 20000}, sets each reply's
- * input, cacheRead and cacheWrite tokens (default 1000 input). Reply n is
- * timestamped (n - 1) * SCRIPTED_STEP_MS after now, to fake gaps between
- * requests. SCRIPTED_STREAM_MS streams the final reply as several text deltas
+ * Each reply uses 1000 input and 100 output tokens. SCRIPTED_STREAM_MS
+ * streams the final reply as several text deltas
  * that many milliseconds apart, marked "pending" as real providers mark a
  * message still streaming.
  */
@@ -17,16 +15,11 @@ import { setTimeout as sleep } from "node:timers/promises";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import type { AssistantMessage, AssistantMessageEventStream, Model, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { Type } from "typebox";
-import { parseJson } from "../../src/json.ts";
 
 const env = (name: string, fallback: string): string => process.env[name] ?? fallback;
 
-const TokensSchema = Type.Object({ input: Type.Optional(Type.Number()), cacheRead: Type.Optional(Type.Number()), cacheWrite: Type.Optional(Type.Number()) }, { additionalProperties: false });
-
 function usage(usd: number): Usage {
-  const { input = 1000, cacheRead = 0, cacheWrite = 0 } = parseJson(TokensSchema, env("SCRIPTED_TOKENS", "{}"), "SCRIPTED_TOKENS");
-  return { input, output: 100, cacheRead, cacheWrite, totalTokens: input + cacheRead + cacheWrite + 100, cost: { input: 0, output: usd, cacheRead: 0, cacheWrite: 0, total: usd } };
+  return { input: 1000, output: 100, cacheRead: 0, cacheWrite: 0, totalTokens: 1100, cost: { input: 0, output: usd, cacheRead: 0, cacheWrite: 0, total: usd } };
 }
 
 /** The streamed reply, in the pieces it arrives in. */
@@ -63,7 +56,6 @@ export default function scriptedProvider(pi: ExtensionAPI): void {
     }
     requests += 1;
     appendFileSync(env("SCRIPTED_LOG", "/dev/null"), `${String(requests)} ${model.id}\n`);
-    message.timestamp += (requests - 1) * Number(env("SCRIPTED_STEP_MS", "0"));
     stream.push({ type: "start", partial: message });
     const streamMs = Number(env("SCRIPTED_STREAM_MS", "0"));
     if (streamMs > 0 && requests > Number(env("SCRIPTED_TOOL_TURNS", "0"))) {
