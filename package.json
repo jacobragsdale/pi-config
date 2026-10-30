@@ -10,6 +10,9 @@
   "pi": {
     "extensions": [
       "./extensions/*/index.ts"
+    ],
+    "skills": [
+      "./skills"
     ]
   },
   "workspaces": [
@@ -24,6 +27,8 @@
     "lint": "eslint . --max-warnings 0",
     "format:check": "prettier . --check",
     "test": "node --test tests/*.test.ts",
+    "validate-skills": "uv run --quiet scripts/validate.py",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm test && npm run validate-skills",
     "check-prices": "node scripts/prices.mjs check",
     "price-table": "node scripts/prices.mjs table"
   },

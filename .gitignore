@@ -2,3 +2,5 @@ node_modules/
 team.json
 *.bak-*
 host_key
+__pycache__/
+.ruff_cache/

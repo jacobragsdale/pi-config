@@ -11,7 +11,7 @@ const tsconfigRootDir = dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(
   {
-    ignores: ["coverage/**", "dist/**"] // Skip generated build and coverage output.
+    ignores: ["coverage/**", "dist/**", "templates/**"] // Skip generated output, and the lint baselines this repo hands to other repos.
   },
   {
     linterOptions: {

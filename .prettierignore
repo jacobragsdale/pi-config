@@ -1,0 +1,6 @@
+# The team skills and their files are agent instructions, kept compact on purpose: padded tables cost tokens on every run.
+skills/
+shared/
+fixtures/
+templates/
+docs/skills/
