@@ -1,8 +1,8 @@
 /**
  * Test-only provider with the model "scripted/model". Each reply costs
  * SCRIPTED_COST dollars (default 1). The
- * first SCRIPTED_TOOL_TURNS replies of a process call bash, so one prompt
- * makes several requests. Every request that gets past
+ * first SCRIPTED_TOOL_TURNS replies of a process call bash (or the tool named
+ * by SCRIPTED_TOOL, with no arguments), so one prompt makes several requests. Every request that gets past
  * before_provider_request is logged in SCRIPTED_LOG as a line with its number
  * and model id. SCRIPTED_DELAY_MS holds each reply back, so a test can abort it.
  * Each reply uses 1000 input and 100 output tokens. SCRIPTED_STREAM_MS
@@ -61,9 +61,10 @@ export default function scriptedProvider(pi: ExtensionAPI): void {
     if (streamMs > 0 && requests > Number(env("SCRIPTED_TOOL_TURNS", "0"))) {
       await streamText(message, stream, streamMs);
     }
+    const tool = env("SCRIPTED_TOOL", "bash");
     const final: AssistantMessage =
       requests <= Number(env("SCRIPTED_TOOL_TURNS", "0"))
-        ? { ...message, stopReason: "toolUse", content: [{ type: "toolCall", id: `call-${String(requests)}`, name: "bash", arguments: { command: "true" } }] }
+        ? { ...message, stopReason: "toolUse", content: [{ type: "toolCall", id: `call-${String(requests)}`, name: tool, arguments: tool === "bash" ? { command: "true" } : {} }] }
         : { ...message, content: [{ type: "text", text: streamMs > 0 ? STREAMED_PIECES.join("") : "ok" }] };
     final.usage = usage(Number(env("SCRIPTED_COST", "1")));
     stream.push({ type: "done", reason: final.stopReason === "toolUse" ? "toolUse" : "stop", message: final });

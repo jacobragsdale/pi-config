@@ -7,6 +7,7 @@ Team settings, extensions and skills for the [pi](https://pi.dev) coding agent, 
 - **Copilot defaults:** Claude Haiku 5.5 with xhigh thinking, Ctrl+P to switch to GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **System prompt:** a short prompt that replaces pi's default, with rules for reaching work systems through agent-cli. See [System prompt](#system-prompt).
+- **Look:** light and dark themes after shadcn/ui, tool calls and prompts drawn as cards, the editor in a rounded frame that shows the model and context use, and a one-line status bar. See [Look](#look).
 - **Team skills:** `/skill:dev-start`, `/skill:dev-finish` and five more carry an Azure DevOps work item from start to merge through agent-cli. See [Team skills](#team-skills).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
 - **Live sessions:** `/live` streams your session to colleagues, who join with one `ssh` command and can suggest prompts that you choose whether to send. It needs a relay, which this repo also holds. See [docs/live/README.md](docs/live/README.md).
@@ -33,7 +34,7 @@ Then restart pi, or run `/reload` in a session that is already open.
 | `settings.json` | The team keys from `agent/settings.json` are merged in. Your other keys are kept.                              |
 | `models.json`   | The team keys from `agent/models.json` are merged in. Your other keys are kept.                                |
 | `SYSTEM.md`     | Linked to `agent/SYSTEM.md` when the repo has one. If you already have your own `SYSTEM.md`, it is left alone. |
-| pi packages     | This clone is added as a package, so pi loads its extensions and team skills from the clone in place.          |
+| pi packages     | This clone is added as a package, so pi loads its extensions, team skills and themes from the clone in place.  |
 
 Before changing a JSON file, it saves a copy next to it as `<file>.bak-<time>`. Running it again is safe.
 
@@ -54,6 +55,23 @@ It also tells pi to use [agent-cli](https://github.com/jacobragsdale/agent-cli) 
 The prompt is read from the cache on every request after the first, so its length costs little: 1,000 tokens of it cost about $0.0001 per request on GPT-6.1 Sol, and a tenth of that on Claude Haiku 5.5.
 
 To add your own instructions, write them in `~/.pi/agent/APPEND_SYSTEM.md`; pi adds that file after the team prompt, and `install.sh` never touches it. If you already had a `SYSTEM.md`, `install.sh` keeps yours instead of the team's.
+
+## Look
+
+The `shadcn-light` and `shadcn-dark` themes follow [shadcn/ui](https://ui.shadcn.com)'s neutral palette: grays, text close to white or black, and color kept for success, failure, links and code. The team setting `"theme": "shadcn-light/shadcn-dark"` makes pi use whichever matches your terminal's background. Both assume a background close to shadcn's: near-black, like Windows Terminal's default, or white.
+
+The `look` extension changes shapes, not colors, so it works with any theme:
+
+- **Tool calls** are cards with a rounded border. The top border says `○ pending`, `● running` with a clock, `✓` with the time the tool took, or `✗` when it failed, and a failed card's border turns red. Click a card, or press Ctrl+O, to expand its output. Commands you run with `!` and `!!` are cards too.
+- **Your prompts** sit in a rounded frame a shade brighter than a card's, instead of on a full-width fill. The `[skill]` line above a skill's prompt, and compaction and branch summaries, get a card's frame.
+- **Tables and code blocks** in replies have rounded corners and a quiet border. A code block's language sits in its top border instead of its fences.
+- **Selectors and dialogs**, such as `/model`, `/resume`, `/tree`, `/settings` and extensions' prompts, open in a rounded frame where the editor was. Blocks pi writes into the chat between two lines, such as `/hotkeys` and `/changelog`, are framed too.
+- **The editor** sits in a rounded frame. Its bottom border shows the model, the thinking level and how much of the context window is used. Pi's working status stays in the top border.
+- **The footer** is one line: the directory, git branch and session name on the left, and the session's cost, the spending limits and other extensions' statuses on the right. It no longer shows token counts; `/session` has them.
+
+HTML exports from `/export` and `/share` keep pi's own tool rendering.
+
+`PI_LOOK=0` turns the extension off, and pi draws everything its own way, still in the team colors. To try another theme, pick one in `/settings`; `install.sh` sets the team's theme again the next time it runs.
 
 ## Spending limits
 
@@ -193,6 +211,8 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Team spending limits                  | `extensions/budget/defaults.json`                                           |
 | Team system prompt                    | `agent/SYSTEM.md`                                                           |
 | Extensions                            | `extensions/<name>/index.ts`                                                |
+| Colors                                | `themes/shadcn-dark.json` and `themes/shadcn-light.json`, then `/reload`    |
+| Cards, the editor frame, footer       | `extensions/look/`                                                          |
 | The pi-live relay                     | `relay/`, then rebuild its image: see `docs/live/deploy.md`                 |
 | Team skills                           | `skills/dev-<name>/SKILL.md`, and their scripts and references in `shared/` |
 | The team's roster, tags and time logs | `shared/assets/team.toml`, in the team's private copy only                  |

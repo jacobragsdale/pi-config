@@ -1,4 +1,4 @@
-# pi-config: the team's pi setup, with its settings, system prompt, extensions, team skills and the pi-live relay
+# pi-config: the team's pi setup, with its settings, system prompt, themes, extensions, team skills and the pi-live relay
 
 ## System
 
@@ -19,6 +19,7 @@ This repository is public on GitHub. The team works in a private Azure DevOps co
 ## Verify
 
 - Extensions: `npm test` drives real pi processes in RPC mode against `tests/fixtures/scripted-provider.ts`, in throwaway agent directories.
+- The look: RPC mode draws nothing, so `tests/look.test.ts` renders the cards and borders directly at fixed widths. Before shipping a shape change, look at every screen pi can show in a real terminal, in both themes and at a narrow width, not only the one that changed.
 - At work: `node scripts/smoke-copilot.mjs` makes one tiny real request.
 - Skills: three real runs at work, as under Rules.
 
@@ -43,3 +44,6 @@ The reasons behind the skill rules are in [docs/skills/design.md](docs/skills/de
 - Prettier skips `skills/`, `shared/`, `fixtures/`, `templates/` and `docs/skills/`. Their compact tables are on purpose: a skill's text is paid for on every run.
 - ESLint skips `templates/`, the lint baselines this repository hands to other repositories.
 - In pi a skill runs as `/skill:dev-<name>`, not `/dev-<name>`.
+- pi reloads a changed theme by itself only from the agent directory. After editing `themes/`, run `/reload`.
+- pi's HTML export draws custom tools with their TUI renderers, but one call or result at a time and without a terminal. A renderer that draws a call and its result as one piece, as `extensions/look/card.ts` does, must fall back to plain components there.
+- pi has no hook for drawing prompts, `!` commands, summary blocks, Markdown tables and code, or selectors, so `extensions/look/messages.ts`, `markdown.ts` and `panels.ts` swap methods on pi's own classes and containers, some of them private, and put them back on `session_shutdown`. After a pi upgrade, sweep every screen in a real terminal: a turn with tools, a table and code, `!` commands, a skill, `/compact`, and each selector and dialog.
