@@ -48,7 +48,7 @@ To turn off the daily check, set `PI_CONFIG_UPDATE_CHECK=0`.
 
 `agent/SYSTEM.md` replaces pi's default system prompt with these working rules: read before editing, verify with the project's own checks, make the smallest change, never commit unless asked, run Python through uv. Pi still adds the tool list, skills, the repo's `AGENTS.md` and the working directory after it.
 
-It also tells pi to reach Azure DevOps, Azure, Kubernetes, databases and other work systems through [agent-cli](https://github.com/jacobragsdale/agent-cli), and to ask before falling back to az, kubectl, sqlcmd or curl. Pi runs agent-cli writes with `--dry-run` first, and never adds `--yes` (destructive changes) or `--reveal` (secrets) unless you asked for that exact action.
+It also tells pi to use [agent-cli](https://github.com/jacobragsdale/agent-cli) for Azure DevOps, Azure, Kubernetes, databases and other work systems when it helps, and otherwise whatever tool does the job, such as az, kubectl, curl or git, without stopping to ask. Pi runs agent-cli writes with `--dry-run` first, and never adds `--yes` (destructive changes) or `--reveal` (secrets) unless you asked for that exact action.
 
 The prompt is read from the cache on every request after the first, so its length costs little: 1,000 tokens of it cost about $0.0001 per request on GPT-6.1 Sol, and a tenth of that on Claude Haiku 5.5.
 
