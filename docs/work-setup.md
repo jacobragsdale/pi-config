@@ -178,7 +178,7 @@ Each teammate:
 
 ## 9. Watch the first week
 
-- **Costs:** compare a few days of `/budget` totals with the team's Copilot usage report. Pi's costs are estimates from its price list, so a steady gap means a price in `agent/models.json` or `data/copilot-prices.json` needs fixing.
+- **Costs:** compare a few days of `/budget` totals with the team's Copilot usage report. Pi's costs are estimates from its price list, so a steady gap means a price in `agent/models.json` or `scripts/copilot-prices.json` needs fixing.
 - **Compaction:** Claude Haiku 5.5 compacts at about 84K tokens to stay under its 100K price threshold, and GPT-6.1 Sol at about 239K to stay under 272K. Watch whether long tasks lose track after a compaction.
 - **The skills' numbers:** run the metrics command each week, as under [Measure the effect](../README.md#measure-the-effect). A skill that moves none of them is cut.
 - **pi upgrades:** after each one, run `npm run check-prices` in the repo to catch price or model changes.

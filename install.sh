@@ -14,8 +14,8 @@ mkdir -p "$agent"
 echo "Installing pi-config into $agent"
 
 # JSON settings are merged, not linked: pi writes settings.json itself.
-node "$repo/lib/merge-json.mjs" "$repo/agent/settings.json" "$agent/settings.json"
-node "$repo/lib/merge-json.mjs" "$repo/agent/models.json" "$agent/models.json"
+node "$repo/scripts/merge-json.mjs" "$repo/agent/settings.json" "$agent/settings.json"
+node "$repo/scripts/merge-json.mjs" "$repo/agent/models.json" "$agent/models.json"
 
 # SYSTEM.md is linked, so a git pull updates it. A personal SYSTEM.md is kept.
 if [[ -f $repo/agent/SYSTEM.md ]]; then

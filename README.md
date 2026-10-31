@@ -207,7 +207,7 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
 | Team defaults                            | `agent/settings.json`                                                                                      |
 | Model context caps or price fixes        | `agent/models.json`, then run `npm run check-prices`                                                       |
-| Copilot prices                           | `data/copilot-prices.json` (copied from GitHub's pricing page)                                             |
+| Copilot prices                           | `scripts/copilot-prices.json` (copied from GitHub's pricing page)                                          |
 | Team spending limits                     | `extensions/budget/defaults.json`                                                                          |
 | Team system prompt                       | `agent/SYSTEM.md`                                                                                          |
 | Extensions                               | `extensions/<name>/index.ts`                                                                               |

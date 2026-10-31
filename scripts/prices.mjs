@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const readJson = (path) => JSON.parse(readFileSync(path, "utf8"));
-const prices = readJson(join(repo, "data/copilot-prices.json"));
+const prices = readJson(join(repo, "scripts/copilot-prices.json"));
 const overrides = readJson(join(repo, "agent/models.json")).providers["github-copilot"].modelOverrides;
 
 // Token profiles, derived from measured pi tasks (2026-10-16): a small task is

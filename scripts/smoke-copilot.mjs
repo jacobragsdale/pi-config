@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const agent = process.env.PI_CODING_AGENT_DIR || join(process.env.HOME ?? "", ".pi/agent");
-const prices = JSON.parse(readFileSync(join(repo, "data/copilot-prices.json"), "utf8")).models;
+const prices = JSON.parse(readFileSync(join(repo, "scripts/copilot-prices.json"), "utf8")).models;
 let failures = 0;
 
 const ok = (text) => console.log(`  ok    ${text}`);
@@ -68,7 +68,7 @@ function ledgerTotal() {
   return { lines: lines.length, usd: lines.reduce((sum, line) => sum + JSON.parse(line).usd, 0) };
 }
 
-/** Price a usage record from data/copilot-prices.json, as GitHub publishes it. */
+/** Price a usage record from scripts/copilot-prices.json, as GitHub publishes it. */
 function githubPrice(modelId, usage) {
   const p = prices[modelId];
   if (p === undefined) return undefined;

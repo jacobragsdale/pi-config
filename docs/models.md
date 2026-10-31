@@ -71,7 +71,7 @@ These are estimates: real tasks vary in their mix of input and output, and Copil
 
 ## Keeping prices current
 
-`data/copilot-prices.json` is a copy of [GitHub's pricing page](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing), with the date it was checked. Pi's catalog carries its own copy of the prices, which is what pi uses to show costs.
+`scripts/copilot-prices.json` is a copy of [GitHub's pricing page](https://docs.github.com/en/copilot/reference/copilot-billing/models-and-pricing), with the date it was checked. Pi's catalog carries its own copy of the prices, which is what pi uses to show costs.
 
 After a pi upgrade, or when GitHub changes prices, run:
 
@@ -79,4 +79,4 @@ After a pi upgrade, or when GitHub changes prices, run:
 npm run check-prices
 ```
 
-It exits non-zero when pi's prices differ from `data/copilot-prices.json`, or when a tiered model has no context cap. To fix a wrong price in pi, add a `cost` override for the model in `agent/models.json`. To pick up a GitHub price change, update `data/copilot-prices.json` from the page, then regenerate the table above with `npm run price-table`.
+It exits non-zero when pi's prices differ from `scripts/copilot-prices.json`, or when a tiered model has no context cap. To fix a wrong price in pi, add a `cost` override for the model in `agent/models.json`. To pick up a GitHub price change, update `scripts/copilot-prices.json` from the page, then regenerate the table above with `npm run price-table`.
