@@ -258,8 +258,8 @@ with `/pi-config-update`.
 `team.toml` is the one exception to the rule that skills hold no data. At
 home it holds only placeholders. The real values are filled in only in the
 ADO copy of the repository, which is why the porting guide's first step
-makes pushing to GitHub fail from that copy. The banned-words check skips this file, because
-it is the one place the team's names belong.
+makes pushing to GitHub fail from that copy. The banned-words check skips
+this file, because it is the one place the team's names belong.
 
 ## Repository context
 
@@ -360,36 +360,20 @@ agent-cli plus repository context, not by workflows.
 
 ## Repository layout
 
-```text
-AGENTS.md                  the rules for changing the repository, skills included
-docs/skills/design.md      this page
-docs/work-setup.md         the checklist for moving the repository to work
-skills/dev-<name>/         SKILL.md, and scripts/, references/ and assets/ links into shared/
-shared/                    the one copy of every script, reference and asset: criteria and sizing, style, review checklist, team.toml, the context templates
-templates/lint/            the lint baseline configs
-scripts/                   validate.py, metrics.py, adopt_lint.py
-fixtures/<skill>/          notes on failures that changed a skill
-```
-
-pi loads the skills from the clone in place, so a skill's folder can link to
-the files it shares with other skills. Each file exists once, under `shared/`,
-and nothing has to be copied or kept in step.
+Each skill's folder holds its `SKILL.md`, with `scripts/`, `references/` and
+`assets/` linking into `shared/`, the one copy of every file the skills
+share. pi loads the skills from the clone in place, so the links work and
+nothing has to be copied or kept in step. The README's "Change it" table maps
+the rest of the repository.
 
 Every script is a single file of stdlib-only Python 3.11 or later with a
-PEP 723 header. That makes the scripts network-free, so a corporate proxy or
-certificate problem cannot break them, and they run under `uv run` or plain
-`python3`. A script whose output a person reads, such as `sprint.py` and
-`metrics.py`, prints colored tables in a terminal and Markdown when piped, so
-an agent chat renders the same view as tables. A developer can also run
-`sprint.py` directly, without an agent and at no token cost. A script only an
-agent reads, such as `ticket.py` and `ctx.py`, prints JSON.
-
-Installation is pi-config's: clone the repository and run `install.sh`, which
-adds the clone to pi as a package, extensions and skills together. Updating is
-`/pi-config-update`. In pi a skill runs as `/skill:dev-<name>`.
-
-The prerequisites on a developer's machine are WSL, agent-cli, every
-repository cloned under `~/dev/`, and Python 3.11 or later (or uv) in WSL.
+PEP 723 header. With nothing to install, a corporate proxy or certificate
+problem cannot break them, and they run under `uv run` or plain `python3`. A
+script whose output a person reads, such as `sprint.py` and `metrics.py`,
+prints colored tables in a terminal and Markdown when piped, so an agent chat
+renders the same view as tables, and a developer can run `sprint.py` directly
+at no token cost. A script only an agent reads, such as `ticket.py` and
+`ctx.py`, prints JSON.
 
 ## Rollout and feedback
 
@@ -404,24 +388,13 @@ session where it happened. The agent drafts the fix from its own context and
 opens a pull request to this repository, and the maintainer owns every merge.
 A failure can be concrete ("posted a 40-line PR description") or a matter of
 feel ("too chatty", "asked questions it could have answered"). Both count.
+Each fix ships with a fixture, a short note under `fixtures/<skill>/`;
+[fixtures/README.md](../../fixtures/README.md) says what one holds, and how
+replaying them after a model upgrade keeps the skills getting shorter.
 
-Each fix ships with a fixture: a short, loose note in `fixtures/<skill>/` that
-says what was asked, what went wrong or felt wrong, and which rule changed. A
-fixture has no required format and no automated harness. It does three jobs.
-It explains why a rule exists. It gives a regression check, since its prompt
-can be replayed when the skill changes. And it gives a pruning signal: after a
-model upgrade, replay the fixtures without the rule, and if the agent now
-behaves anyway, delete the rule. That last job keeps the skills getting
-shorter over time instead of only longer.
-
-Success is measured from ADO, weekly, with a baseline taken before v1 ships:
-
-- cycle time, from a work item starting to finishing
-- pull request review turnaround
-- active items with no note in the last three days
-- stale items
-
-A skill that moves none of these numbers is cut.
+Success is measured from ADO every week by `scripts/metrics.py`, starting
+from a baseline taken before v1 ships. A skill that moves none of its numbers
+is cut.
 
 The repository is built at home and public on GitHub. The team works in a
 private ADO copy that pulls from GitHub but can never push to it, because
@@ -432,36 +405,29 @@ internal context and stay in that copy.
 
 The repository is built at home against a sandbox ADO project and agent-cli's
 public build, while the team runs an internal agent-cli with commands of its
-own, such as the time logs. [docs/work-setup.md](../work-setup.md) is the
-checklist for the move. Every piece that must change at work is marked
-`PORT:`, `validate.py` lists the markers that remain as warnings, and a skill
-that reaches an unported piece says so and skips it rather than guessing.
+own, such as the time logs. Every piece that must change at work is marked
+`PORT:`, and a skill that reaches an unported piece says so and skips it
+rather than guessing. [docs/work-setup.md](../work-setup.md) is the checklist
+for the move.
 
 ## Lint adoption
 
 Dropping standards skills makes linters responsible for code quality, and many
-repositories carry years of lint debt. Each repository adopts the baseline
-configs in `templates/lint/` through one mechanical pull request. The configs
-cover ruff and ty for Python, ESLint and strict `tsconfig` for Angular, .NET
-analyzers with `.editorconfig` for C#, and clippy for Rust.
-
-1. Apply the template config.
-2. Autofix the safe fixes only: `ruff check --fix` without unsafe fixes,
-   `eslint --fix`, `dotnet format`, `cargo clippy --fix`.
-3. Bulk-suppress everything that remains (`ruff check --add-noqa`, ESLint's
-   suppressions file, .NET rule severities, a clippy allow-list), so `check`
-   is green on the first day.
-4. From then on, only new code must be clean. Suppressions are burned down in
-   dedicated cleanup pull requests, never inside feature pull requests, because
-   lint churn inside a feature diff makes review worse.
+repositories carry years of lint debt. Each repository adopts the baseline in
+`templates/lint/` through one mechanical pull request: the safe autofixes,
+then everything that remains suppressed, so `check` is green on the first
+day. From then on only new code must be clean. Suppressions are burned down
+in dedicated cleanup pull requests, never inside feature pull requests,
+because lint churn inside a feature diff makes review worse.
 
 Formatters rewrite whole files and conflict with open branches, so the
 adoption pull request runs a formatter only when the repository has no open
-pull requests. The repositories the team touches most adopt first. The rest
-adopt the next time someone works in them. The procedure is
-`scripts/adopt_lint.py` plus a how-to guide, not a skill. `/dev-context`
-records each repository's `check` command, and reports any repository that has
-none.
+pull requests. The repositories the team touches most adopt first, and the
+rest the next time someone works in them. Adoption is a script and a how-to,
+not a skill: `scripts/adopt_lint.py` and
+[templates/lint/README.md](../../templates/lint/README.md). `/dev-context`
+records each repository's `check` command, and reports any repository that
+has none.
 
 ## Deferred decisions
 

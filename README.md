@@ -203,19 +203,23 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 
 ## Change it
 
-| To change                             | Edit                                                                        |
-| ------------------------------------- | --------------------------------------------------------------------------- |
-| Team defaults                         | `agent/settings.json`                                                       |
-| Model context caps or price fixes     | `agent/models.json`, then run `npm run check-prices`                        |
-| Copilot prices                        | `data/copilot-prices.json` (copied from GitHub's pricing page)              |
-| Team spending limits                  | `extensions/budget/defaults.json`                                           |
-| Team system prompt                    | `agent/SYSTEM.md`                                                           |
-| Extensions                            | `extensions/<name>/index.ts`                                                |
-| Colors                                | `themes/shadcn-dark.json` and `themes/shadcn-light.json`, then `/reload`    |
-| Cards, the editor frame, footer       | `extensions/look/`                                                          |
-| The pi-live relay                     | `relay/`, then rebuild its image: see `docs/live/deploy.md`                 |
-| Team skills                           | `skills/dev-<name>/SKILL.md`, and their scripts and references in `shared/` |
-| The team's roster, tags and time logs | `shared/assets/team.toml`, in the team's private copy only                  |
+| To change                                | Edit                                                                                                       |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Team defaults                            | `agent/settings.json`                                                                                      |
+| Model context caps or price fixes        | `agent/models.json`, then run `npm run check-prices`                                                       |
+| Copilot prices                           | `data/copilot-prices.json` (copied from GitHub's pricing page)                                             |
+| Team spending limits                     | `extensions/budget/defaults.json`                                                                          |
+| Team system prompt                       | `agent/SYSTEM.md`                                                                                          |
+| Extensions                               | `extensions/<name>/index.ts`                                                                               |
+| Colors                                   | `themes/shadcn-dark.json` and `themes/shadcn-light.json`, then `/reload`                                   |
+| Cards, the editor frame, footer          | `extensions/look/`                                                                                         |
+| The pi-live relay                        | `relay/`, then rebuild its image: see `docs/live/deploy.md`                                                |
+| The relay's deployment                   | `Dockerfile`, and `deploy/k8s/`, whose real values are in the team's private copy only                     |
+| Team skills                              | `skills/dev-<name>/SKILL.md`, their scripts and references in `shared/`, and a note in `fixtures/<skill>/` |
+| The team's roster, tags and time logs    | `shared/assets/team.toml`, in the team's private copy only                                                 |
+| The lint baseline for other repositories | `templates/lint/`, which `scripts/adopt_lint.py` applies                                                   |
+| Repo checks and tools                    | `scripts/`: the skills validator, the price check, the Copilot smoke test, the team metrics                |
+| Tests                                    | `tests/<name>.test.ts`, with the scripted provider in `tests/fixtures/`                                    |
 
 This repo is public: don't commit company names, internal URLs, hostnames or paths. Company-specific values go in `team.json`, which only the team's private copy commits, and in `shared/assets/team.toml`, which holds placeholders here.
 

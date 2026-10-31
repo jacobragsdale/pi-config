@@ -2,7 +2,7 @@
   "name": "pi-config",
   "version": "0.1.0",
   "private": true,
-  "description": "Team settings and extensions for the pi coding agent, tuned for GitHub Copilot",
+  "description": "The team's pi setup: settings, system prompt, themes, extensions, team skills and the pi-live relay",
   "type": "module",
   "keywords": [
     "pi-package"
