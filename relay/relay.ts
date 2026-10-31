@@ -27,6 +27,20 @@ const HELLO_TIMEOUT_MS = 10_000;
 const PING_MS = 20_000;
 const BASE32 = "abcdefghijklmnopqrstuvwxyz234567";
 
+/**
+ * A new ed25519 SSH host key in OpenSSH format. ssh2's generator strips
+ * leading zero bytes from the public key, so about one key in 256 comes out
+ * a byte short and ssh2 can't read it back; this draws again until it can.
+ */
+export function newHostKey(): string {
+  for (;;) {
+    const { private: key } = ssh2.utils.generateKeyPairSync("ed25519");
+    if (!(ssh2.utils.parseKey(key) instanceof Error)) {
+      return key;
+    }
+  }
+}
+
 export interface RelayOptions {
   /** 0 picks a free port. */
   readonly httpPort: number;

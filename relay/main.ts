@@ -13,7 +13,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import ssh2 from "ssh2";
-import { Relay } from "./relay.ts";
+import { Relay, newHostKey } from "./relay.ts";
 
 const log = (line: string): void => {
   console.log(`${new Date().toISOString()} ${line}`);
@@ -35,7 +35,7 @@ function loadHostKey(path: string): string {
   if (existsSync(path)) {
     return readFileSync(path, "utf8");
   }
-  const { private: key } = ssh2.utils.generateKeyPairSync("ed25519");
+  const key = newHostKey();
   try {
     writeFileSync(path, key, { mode: 0o600 });
   } catch (err) {

@@ -9,7 +9,7 @@ import { WebSocket } from "ws";
 import { Check } from "typebox/value";
 import { PROTOCOL_VERSION, RelayMessageSchema } from "../src/protocol.ts";
 import type { HostMessage, Meta, RelayMessage } from "../src/protocol.ts";
-import { Relay } from "../relay/relay.ts";
+import { Relay, newHostKey } from "../relay/relay.ts";
 
 const WAIT_MS = 15_000;
 
@@ -44,11 +44,10 @@ export interface TestRelay {
 
 export async function startRelay(): Promise<TestRelay> {
   const logs: string[] = [];
-  const { private: hostKey } = ssh2.utils.generateKeyPairSync("ed25519");
   const relay = new Relay({
     httpPort: 0,
     sshPort: 0,
-    hostKey,
+    hostKey: newHostKey(),
     joinHost: "127.0.0.1",
     log: (line) => {
       logs.push(line);

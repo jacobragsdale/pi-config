@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, test } from "node:test";
+import ssh2 from "ssh2";
+import { newHostKey } from "../relay/relay.ts";
 import { FakeHost, Guest, assistant, eventually, meta, startRelay, user } from "./live.ts";
 import type { TestRelay } from "./live.ts";
 
@@ -32,6 +34,13 @@ async function guest(token: string, name = "alice"): Promise<Guest> {
   await joined.sees("1 watching");
   return joined;
 }
+
+await test("every new host key is one ssh2 can read", () => {
+  // ssh2's own generator makes an unreadable key about once in 256 draws.
+  for (let i = 0; i < 2000; i += 1) {
+    assert.ok(!(ssh2.utils.parseKey(newHostKey()) instanceof Error));
+  }
+});
 
 await test("a host gets a join command with an unguessable token", async () => {
   const { token, join } = await host();
