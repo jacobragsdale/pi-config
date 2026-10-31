@@ -8,7 +8,7 @@ that carry a ticket keep each developer's sprint, and the team's, in view.
 Knowledge specific to the firm stays out of the skills. It lives in each
 repository's `AGENTS.md` and `docs/app-context.md`, in
 [agent-cli](https://github.com/jacobragsdale/agent-cli) configuration, and
-in one team file, `shared/team.toml`.
+in one team file, `shared/assets/team.toml`.
 
 This page records the decisions and the reasons behind them. Each skill's
 internals are designed separately, against a real ticket, when the skill is
@@ -258,7 +258,7 @@ with `/pi-config-update`.
 `team.toml` is the one exception to the rule that skills hold no data. At
 home it holds only placeholders. The real values are filled in only in the
 ADO copy of the repository, which is why the porting guide's first step
-removes the GitHub remote. The banned-words check skips this file, because
+makes pushing to GitHub fail from that copy. The banned-words check skips this file, because
 it is the one place the team's names belong.
 
 ## Repository context

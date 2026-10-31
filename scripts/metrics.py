@@ -17,7 +17,7 @@ A skill that moves none of these numbers is cut. Run this weekly with --log,
 which appends one JSON line per run, so the baseline and every week after it
 sit in one file. Reads only; every call goes through agent-cli.
 
-The team and area default to shared/team.toml's [ado] values. In a terminal
+The team and area default to shared/assets/team.toml's [ado] values. In a terminal
 the summary is a colored table; piped, it is Markdown; --json prints the data.
 
 Examples:
@@ -46,7 +46,7 @@ if sys.version_info < (3, 11):
 
 import tomllib
 
-TEAM_FILE = Path(__file__).resolve().parent.parent / "shared" / "team.toml"
+TEAM_FILE = Path(__file__).resolve().parent.parent / "shared" / "assets" / "team.toml"
 
 # ADO's state categories, which every process maps its own state names onto.
 ACTIVE_CATEGORY = "InProgress"
@@ -355,11 +355,11 @@ def attention(scope: Scope, now: datetime, silent_days: int, stale_days: int) ->
 
 
 def team_defaults() -> dict[str, str]:
-    """[ado] team and area from shared/team.toml, when they are filled in."""
+    """[ado] team and area from shared/assets/team.toml, when they are filled in."""
     try:
         config = tomllib.loads(TEAM_FILE.read_text(encoding="utf-8"))
-    except FileNotFoundError:
-        return {}
+    except FileNotFoundError as err:
+        raise MetricsError(f"{TEAM_FILE} is missing; pi-config's shared/assets/ holds it") from err
     except tomllib.TOMLDecodeError as err:
         raise MetricsError(f"{TEAM_FILE}: {err}") from err
     section = config.get("ado")
