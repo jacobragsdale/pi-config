@@ -59,3 +59,16 @@ export function redact(text: string): Redacted {
     { text, count: 0 }
   );
 }
+
+/**
+ * redact for text still being written, as the streamed message and a running
+ * tool's output are: the patterns need a secret's full length, or a private
+ * key's END line, so what may be the start of one is held back. The last word
+ * waits until the text moves past it, and a private key with no END yet is
+ * masked to the end.
+ */
+export function redactPartial(text: string): string {
+  return redact(text)
+    .text.replace(/\S+$/, "")
+    .replace(/-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*$/, marker("private-key"));
+}

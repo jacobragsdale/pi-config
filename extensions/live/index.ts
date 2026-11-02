@@ -1,9 +1,10 @@
 /**
  * /live: stream this pi session to colleagues through a pi-live relay. Guests
- * join with the ssh command /live prints, watch the conversation as it
- * happens, and can suggest prompts. Suggestions wait above the editor until
- * you put one in your editor (alt+s) or dismiss it (alt+x); nothing a guest
- * types reaches the agent unless you send it yourself.
+ * join with the ssh command /live shows above the editor until someone joins,
+ * follow the conversation as it happens, and can suggest prompts. Suggestions
+ * wait above the editor until you accept one (alt+s), which runs it, or reject
+ * it (alt+x); nothing a guest types reaches the agent unless you accept it.
+ * Both are drawn between two rules, which the look turns into a card.
  *
  * Run /live again to end the stream; quitting pi ends it too. The stream
  * follows you across /new, /resume, /fork and /tree.
@@ -14,28 +15,33 @@
 import { existsSync, readFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { join } from "node:path";
-import { VERSION, copyToClipboard, getAgentDir } from "@earendil-works/pi-coding-agent";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder, VERSION, copyToClipboard, getAgentDir } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+import { Container, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import { Check } from "typebox/value";
 import { parseJson } from "../../src/json.ts";
+import { printable, printableLine } from "../../src/printable.ts";
 import { PROTOCOL_VERSION, RelayMessageSchema } from "../../src/protocol.ts";
 import type { HostMessage, RelayMessage, SuggestionStatus } from "../../src/protocol.ts";
-import { scrub } from "../../src/scrub.ts";
+import { scrub, scrubPartial } from "../../src/scrub.ts";
 import { footerMeta, gitBranch } from "./footer.ts";
-import { catchUp } from "./transcript.ts";
+import { catchUp, inParts, wholeBranch } from "./transcript.ts";
+import type { Change } from "./transcript.ts";
 
 const ConfigSchema = Type.Object({ url: Type.Optional(Type.String({ minLength: 1 })) }, { additionalProperties: false });
 
 const KEY = "live";
-const USE_KEY = "alt+s";
-const DISMISS_KEY = "alt+x";
+const ACCEPT_KEY = "alt+s";
+const REJECT_KEY = "alt+x";
 /** Streaming text and tool output are sent at most this often. */
 const THROTTLE_MS = 100;
 /** Catches entries no event announces, such as ! commands. */
 const SYNC_MS = 500;
 const READY_TIMEOUT_MS = 10_000;
 const SHOWN_SUGGESTIONS = 3;
+/** The footer names this many guests, then counts the rest. */
+const SHOWN_GUESTS = 3;
 
 interface Suggestion {
   readonly id: string;
@@ -47,6 +53,8 @@ interface Suggestion {
 interface Live {
   readonly socket: WebSocket;
   readonly join: string;
+  /** Whether the join command went to the host's clipboard. */
+  copied: boolean;
   guests: readonly string[];
   readonly suggestions: Suggestion[];
   /** Ids of the branch entries guests have, in order. */
@@ -86,10 +94,51 @@ function parseRelayMessage(data: unknown): RelayMessage | undefined {
   }
 }
 
-const oneLine = (text: string): string => {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > 160 ? `${flat.slice(0, 159)}…` : flat;
-};
+const oneLine = (text: string): string => truncateToWidth(printableLine(text), 160, "…");
+
+/** A guest's name as the relay sent it, on one printable line. */
+function guestName(name: string): string {
+  const line = printableLine(name);
+  return line === "" ? "guest" : line;
+}
+
+/** Who has joined, for the footer: every name up to SHOWN_GUESTS, else two and a count. */
+export function guestNames(names: readonly string[]): string {
+  if (names.length === 0) {
+    return "nobody joined yet";
+  }
+  return names.length <= SHOWN_GUESTS ? names.join(", ") : `${names.slice(0, 2).join(", ")} +${String(names.length - 2)}`;
+}
+
+/** What waits above the editor: the suggestions, else the join command until someone joins. */
+export function cardLines(stream: Pick<Live, "join" | "copied" | "guests" | "suggestions">, theme: Theme): string[] | undefined {
+  const [first] = stream.suggestions;
+  if (first !== undefined) {
+    const shown = stream.suggestions.slice(0, SHOWN_SUGGESTIONS);
+    const width = Math.max(...shown.map((s) => s.from.length));
+    const lines = shown.map((s, i) => `${theme.fg(i === 0 ? "accent" : "muted", s.from.padEnd(width))}  ${oneLine(s.text)}`);
+    const more = stream.suggestions.length - shown.length;
+    const hint = `${ACCEPT_KEY} accepts ${first.from}'s and runs it · ${REJECT_KEY} rejects it${more > 0 ? ` · ${String(more)} more waiting` : ""}`;
+    return [...lines, theme.fg("dim", hint)];
+  }
+  if (stream.guests.length === 0) {
+    return [`Live. Send this to whoever should join${stream.copied ? " (copied)" : ""}:`, `  ${theme.fg("mdCode", stream.join)}`, theme.fg("dim", "/live link shows it again · /live ends the stream")];
+  }
+  return undefined;
+}
+
+/** `lines` between two rules, as pi draws its own blocks, and a blank line under them; the look draws the rules as a card. */
+function ruled(lines: readonly string[], theme: Theme): Container {
+  const block = new Container();
+  const rule = (): DynamicBorder => new DynamicBorder((text) => theme.fg("borderMuted", text));
+  block.addChild(rule());
+  for (const line of lines) {
+    block.addChild(new Text(line, 1, 0));
+  }
+  block.addChild(rule());
+  block.addChild(new Spacer(1));
+  return block;
+}
 
 /** Open a socket to the relay and wait for it to hand out the join command. */
 function connect(url: string): Promise<{ socket: WebSocket; ready: Ready }> {
@@ -150,11 +199,22 @@ export default function live(pi: ExtensionAPI): void {
   if (process.env["PI_LIVE"] === "0") {
     return;
   }
-  /** The latest context this copy of the extension saw; undefined until its session starts. */
+  /**
+   * The latest context this copy of the extension saw; undefined until its
+   * session starts. pi makes it stale once the session shuts down, so code
+   * that runs later, from a timer, a promise or the socket, checks `attached`
+   * before touching it.
+   */
   let ctx: ExtensionContext | undefined;
   let attached = false;
+  /** Whether this copy's session is still running: false once /new, /resume, /fork or /reload replaces it. */
+  let active = true;
+  /** Whether /live is waiting for the relay to answer. */
+  let connecting = false;
   let branch: string | undefined;
   let syncTimer: NodeJS.Timeout | undefined;
+  /** Whether /compact is running: pi refuses prompts until it's done, where it queues them while the agent works or retries. */
+  let compacting = false;
   const tail = new Throttle();
   const tools = new Map<string, Throttle>();
 
@@ -167,6 +227,12 @@ export default function live(pi: ExtensionAPI): void {
     }
   }
 
+  function sendChange(change: Change): void {
+    for (const part of inParts(change)) {
+      send(part);
+    }
+  }
+
   function sync(): void {
     const stream = current();
     if (stream === undefined || ctx === undefined || !attached) {
@@ -176,12 +242,12 @@ export default function live(pi: ExtensionAPI): void {
     const change = catchUp(stream.sent, branch);
     stream.sent = branch.map((entry) => entry.id);
     if (change !== undefined) {
-      send(change);
+      sendChange(change);
     }
   }
 
   function sendMeta(): void {
-    if (ctx !== undefined && current() !== undefined) {
+    if (ctx !== undefined && attached && current() !== undefined) {
       send({ type: "meta", ...footerMeta(ctx, pi.getThinkingLevel(), branch) });
     }
   }
@@ -206,15 +272,15 @@ export default function live(pi: ExtensionAPI): void {
       return;
     }
     const { theme } = ctx.ui;
-    const watching = stream.guests.length === 0 ? "nobody watching yet" : stream.guests.join(", ");
-    ctx.ui.setStatus(KEY, `${theme.fg("success", "● live")} · ${watching}`);
-    if (stream.suggestions.length === 0) {
+    ctx.ui.setStatus(KEY, `${theme.fg("success", "● live")} · ${guestNames(stream.guests)}`);
+    const lines = cardLines(stream, theme);
+    if (lines === undefined) {
       ctx.ui.setWidget(KEY, undefined);
-      return;
+    } else if (ctx.mode === "tui") {
+      ctx.ui.setWidget(KEY, (_tui, current) => ruled(lines, current));
+    } else {
+      ctx.ui.setWidget(KEY, lines);
     }
-    const shown = stream.suggestions.slice(0, SHOWN_SUGGESTIONS).map((s) => `${theme.fg("accent", s.from)}: ${oneLine(s.text)}`);
-    const more = stream.suggestions.length > SHOWN_SUGGESTIONS ? [theme.fg("dim", `and ${String(stream.suggestions.length - SHOWN_SUGGESTIONS)} more`)] : [];
-    ctx.ui.setWidget(KEY, [theme.fg("dim", `Suggestions · ${USE_KEY} puts the first in your editor · ${DISMISS_KEY} dismisses it`), ...shown, ...more]);
   }
 
   function clearState(): void {
@@ -229,14 +295,23 @@ export default function live(pi: ExtensionAPI): void {
       return;
     }
     switch (message?.type) {
+      // Names and suggestions are what guests typed: draw none of the escape sequences they might hold.
       case "guests":
-        stream.guests = message.names;
+        stream.guests = message.names.map(guestName);
         break;
-      case "suggestion":
-        stream.suggestions.push({ id: message.id, from: message.from, text: message.text });
+      case "suggestion": {
+        const text = printable(message.text).trim();
+        if (text === "") {
+          send({ type: "suggestion_status", id: message.id, status: "dismissed" });
+        } else {
+          stream.suggestions.push({ id: message.id, from: guestName(message.from), text });
+        }
         break;
+      }
       case "error":
-        ctx?.ui.notify(`pi-live relay: ${message.message}`, "error");
+        if (attached) {
+          ctx?.ui.notify(`pi-live relay: ${message.message}`, "error");
+        }
         break;
       case "ready":
       case undefined:
@@ -250,6 +325,9 @@ export default function live(pi: ExtensionAPI): void {
       return;
     }
     globalThis.piLiveStream = undefined;
+    if (!attached) {
+      return;
+    }
     detach();
     clearState();
     ctx?.ui.notify("The live stream dropped: the relay closed the connection. Run /live to start a new one.", "warning");
@@ -268,13 +346,15 @@ export default function live(pi: ExtensionAPI): void {
     stream.socket.onclose = (): void => {
       onRelayClosed(stream);
     };
-    stream.sent = [];
     clearInterval(syncTimer);
     syncTimer = setInterval(sync, SYNC_MS);
     sendMeta();
     refreshBranch();
     send({ type: "activity", working: !(ctx?.isIdle() ?? true) });
-    sync();
+    // This may be another session than guests have (/new, /resume, /fork), so replace their transcript.
+    const branch = ctx?.sessionManager.getBranch() ?? [];
+    stream.sent = branch.map((entry) => entry.id);
+    sendChange(wholeBranch(branch));
     showState();
   }
 
@@ -321,34 +401,52 @@ export default function live(pi: ExtensionAPI): void {
       ctx?.ui.notify('No relay is set up. Set PI_LIVE_URL, or put {"url": "wss://<relay>/host"} in ~/.pi/agent/live.json.', "error");
       return;
     }
-    const { socket, ready } = await connect(url);
-    globalThis.piLiveStream = { socket, join: ready.join, guests: [], suggestions: [], sent: [] };
+    connecting = true;
+    const { socket, ready } = await connect(url).finally(() => {
+      connecting = false;
+    });
+    if (!active) {
+      // The session was replaced while the relay answered.
+      socket.close(1000, "host left before the stream started");
+      return;
+    }
+    const stream: Live = { socket, join: ready.join, copied: false, guests: [], suggestions: [], sent: [] };
+    globalThis.piLiveStream = stream;
     attach();
-    const copied = await copyJoin(ready.join);
-    const skew = ready.piVersion === VERSION ? "" : `\nThe relay draws with pi ${ready.piVersion} and you run ${VERSION}, so guests may see small differences.`;
-    ctx?.ui.notify(`Live. Send this to whoever should watch${copied}:\n  ${ready.join}\nRun /live again to end the stream.${skew}`, "info");
+    stream.copied = (await copyJoin(ready.join)) !== "";
+    showState();
+    if (attached && ready.piVersion !== VERSION) {
+      ctx?.ui.notify(`The relay draws with pi ${ready.piVersion} and you run ${VERSION}, so guests may see small differences.`, "warning");
+    }
   }
 
-  function resolve(status: SuggestionStatus, context: ExtensionContext): void {
-    const next = current()?.suggestions.shift();
-    if (next === undefined) {
+  /** Answer the first waiting suggestion. An accepted one runs now, or after the current turn when the agent is working. */
+  function answer(accept: boolean, context: ExtensionContext): void {
+    const stream = current();
+    const next = stream?.suggestions[0];
+    if (stream === undefined || next === undefined) {
       context.ui.notify("No suggestions are waiting.", "info");
       return;
     }
-    if (status === "used") {
-      if (context.ui.getEditorText().trim() === "") {
-        context.ui.setEditorText(next.text);
-      } else {
-        context.ui.pasteToEditor(next.text);
-      }
+    if (accept && compacting && !context.isIdle()) {
+      context.ui.notify(`pi is compacting. Accept ${next.from}'s suggestion once it's done.`, "warning");
+      return;
     }
+    stream.suggestions.shift();
+    const status: SuggestionStatus = accept ? "used" : "dismissed";
     send({ type: "suggestion_status", id: next.id, status });
     showState();
+    if (accept) {
+      // It goes to the model as written: pi runs no / commands or skills from an extension's prompt.
+      // A follow-up runs now when pi is idle, and after the current turn when it isn't, even when the
+      // turn is one an accept a moment ago started and isIdle() doesn't show yet.
+      pi.sendUserMessage(next.text, { deliverAs: "followUp" });
+    }
   }
 
   pi.registerCommand("live", {
     description: "Stream this session to colleagues over ssh; run it again to end the stream",
-    getArgumentCompletions: (prefix) => ["link", "use", "dismiss"].filter((word) => word.startsWith(prefix)).map((word) => ({ value: word, label: word })),
+    getArgumentCompletions: (prefix) => ["link", "accept", "reject"].filter((word) => word.startsWith(prefix)).map((word) => ({ value: word, label: word })),
     handler: async (args, context) => {
       ctx = context;
       if (!context.hasUI) {
@@ -358,7 +456,9 @@ export default function live(pi: ExtensionAPI): void {
       const stream = current();
       switch (args.trim()) {
         case "":
-          if (stream === undefined) {
+          if (connecting) {
+            context.ui.notify("Still waiting for the relay to answer.", "info");
+          } else if (stream === undefined) {
             await start().catch((err: unknown) => {
               context.ui.notify(err instanceof Error ? err.message : String(err), "error");
             });
@@ -369,30 +469,30 @@ export default function live(pi: ExtensionAPI): void {
         case "link":
           context.ui.notify(stream === undefined ? "Not live. Run /live to start a stream." : `Guests join with:\n  ${stream.join}${await copyJoin(stream.join)}`, "info");
           return;
-        case "use":
-          resolve("used", context);
+        case "accept":
+          answer(true, context);
           return;
-        case "dismiss":
-          resolve("dismissed", context);
+        case "reject":
+          answer(false, context);
           return;
         default:
-          context.ui.notify("Usage: /live (start or end), /live link, /live use, /live dismiss", "warning");
+          context.ui.notify("Usage: /live (start or end), /live link, /live accept, /live reject", "warning");
       }
     }
   });
 
-  pi.registerShortcut(USE_KEY, {
-    description: "Put the first live-stream suggestion in the editor",
+  pi.registerShortcut(ACCEPT_KEY, {
+    description: "Accept the first live-stream suggestion and run it",
     handler: (context) => {
       ctx = context;
-      resolve("used", context);
+      answer(true, context);
     }
   });
-  pi.registerShortcut(DISMISS_KEY, {
-    description: "Dismiss the first live-stream suggestion",
+  pi.registerShortcut(REJECT_KEY, {
+    description: "Reject the first live-stream suggestion",
     handler: (context) => {
       ctx = context;
-      resolve("dismissed", context);
+      answer(false, context);
     }
   });
 
@@ -403,6 +503,7 @@ export default function live(pi: ExtensionAPI): void {
 
   pi.on("session_shutdown", (event, context) => {
     ctx = context;
+    active = false;
     if (event.reason === "quit") {
       end(false);
     } else {
@@ -414,7 +515,7 @@ export default function live(pi: ExtensionAPI): void {
     ctx = context;
     if (event.message.role === "assistant") {
       sync();
-      send({ type: "tail", message: scrub(event.message) });
+      send({ type: "tail", message: scrubPartial(event.message) });
     }
   });
 
@@ -423,7 +524,7 @@ export default function live(pi: ExtensionAPI): void {
     if (event.message.role === "assistant") {
       const { message } = event;
       tail.run(() => {
-        send({ type: "tail", message: scrub(message) });
+        send({ type: "tail", message: scrubPartial(message) });
       });
     }
   });
@@ -461,7 +562,7 @@ export default function live(pi: ExtensionAPI): void {
     tools.set(event.toolCallId, throttle);
     const result: unknown = event.partialResult;
     throttle.run(() => {
-      send({ type: "tool", phase: "update", id: event.toolCallId, result: scrub(result) });
+      send({ type: "tool", phase: "update", id: event.toolCallId, result: scrubPartial(result) });
     });
   });
 
@@ -488,10 +589,17 @@ export default function live(pi: ExtensionAPI): void {
     ctx = context;
     sync();
   });
+  pi.on("session_before_compact", (event) => {
+    compacting = event.reason === "manual";
+  });
   pi.on("session_compact", (_event, context) => {
     ctx = context;
+    compacting = false;
     sync();
     sendMeta();
+  });
+  pi.on("session_compact_failed", () => {
+    compacting = false;
   });
   pi.on("session_info_changed", (_event, context) => {
     ctx = context;

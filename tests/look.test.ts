@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, test } from "node:test";
 import { BashExecutionComponent, DynamicBorder, SkillInvocationMessageComponent, UserMessageComponent, getMarkdownTheme } from "@earendil-works/pi-coding-agent";
@@ -9,9 +9,8 @@ import type { Component, TuiMouseEvent } from "@earendil-works/pi-tui";
 // pi exports no theme loader; this is the one /settings uses.
 import { loadThemeFromPath, setThemeInstance } from "../node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme.js";
 import { ToolCard, cardRenderers, formatDuration, toolCards } from "../extensions/look/card.ts";
-import { labelledBorder } from "../extensions/look/editor.ts";
 import { statusLines } from "../extensions/look/footer.ts";
-import { compactTokens, contextLabel } from "../extensions/look/index.ts";
+import { compactTokens, contextLabel, labelledBorder } from "../extensions/look/editor.ts";
 import { frameMarkdown, framedCode } from "../extensions/look/markdown.ts";
 import { frameMessages, framedBash, framedNotice, framedPrompt, timeBash } from "../extensions/look/messages.ts";
 import { framePanels, framedPanel } from "../extensions/look/panels.ts";
@@ -44,7 +43,7 @@ function contrast(a: string, b: string): number {
   return ((light ?? 0) + 0.05) / ((darker ?? 0) + 0.05);
 }
 
-for (const name of ["shadcn-dark", "shadcn-light"]) {
+for (const name of ["shadcn-dark"]) {
   await test(`${name} sets every color pi's schema asks for, and nothing else`, () => {
     const file = record(JSON.parse(readFileSync(themePath(name), "utf8")));
     assert.equal(file["name"], name);
@@ -71,7 +70,7 @@ for (const name of ["shadcn-dark", "shadcn-light"]) {
 
   await test(`${name} loads in pi, and its text and muted text are readable on its background`, () => {
     const loaded = loadThemeFromPath(themePath(name), "truecolor");
-    assert.equal(loaded.appearance, name.endsWith("dark") ? "dark" : "light");
+    assert.equal(loaded.appearance, "dark");
     const vars = record(record(JSON.parse(readFileSync(themePath(name), "utf8")))["vars"]);
     const background = String(vars["background"]);
     assert.ok(contrast(String(vars["text"]), background) >= 7);
@@ -79,9 +78,10 @@ for (const name of ["shadcn-dark", "shadcn-light"]) {
   });
 }
 
-await test("the team settings pick the shadcn themes, light and dark", () => {
+await test("the team settings pick shadcn-dark, the only theme", () => {
   const settings = record(JSON.parse(readFileSync(join(repo, "agent/settings.json"), "utf8")));
-  assert.equal(settings["theme"], "shadcn-light/shadcn-dark");
+  assert.equal(settings["theme"], "shadcn-dark");
+  assert.deepEqual(readdirSync(join(repo, "themes")), ["shadcn-dark.json"]);
 });
 
 // --- Tool cards ---
@@ -328,10 +328,17 @@ await test("a selector's rules become its frame and dividers, with blank lines o
   assert.equal(framedPanel(["plain"], 24, (text) => text).offset, -1);
 });
 
-await test("what replaces the editor is framed and still gets its clicks, and the chat's ruled blocks are framed, until undone", () => {
+await test("what replaces the editor is framed and still gets its clicks, and the chat's and widgets' ruled blocks are framed, until undone", () => {
   const editor = new Text("editor", 0, 0);
   const holder = new Container();
   holder.addChild(editor);
+  const widgets = new Container();
+  const ruled = new Container();
+  for (const child of [new DynamicBorder(), new Text("alice: run the tests", 1, 0), new DynamicBorder()]) {
+    ruled.addChild(child);
+  }
+  widgets.addChild(new Text("plain widget", 0, 0));
+  widgets.addChild(ruled);
   const chat = new Container();
   const document = new Container();
   document.addChild(new Container());
@@ -348,7 +355,7 @@ await test("what replaces the editor is framed and still gets its clicks, and th
       return { handled: true };
     }
   };
-  const undo = framePanels({ children: [document, holder] }, editor, () => dark);
+  const undo = framePanels({ children: [document, widgets, holder] }, editor, () => dark);
   try {
     assert.deepEqual(holder.render(24).map(plain), [`editor${" ".repeat(18)}`]);
     holder.clear();
@@ -360,11 +367,13 @@ await test("what replaces the editor is framed and still gets its clicks, and th
       [{ x: 3, y: 1, width: 20 }]
     );
     assert.deepEqual(chat.render(24).map(plain), [`a${" ".repeat(23)}`, `╭${"─".repeat(22)}╮`, `│ b${" ".repeat(20)}│`, `╰${"─".repeat(22)}╯`]);
+    assert.deepEqual(widgets.render(24).map(plain), [`plain widget${" ".repeat(12)}`, `╭${"─".repeat(22)}╮`, "│ alice: run the tests │", `╰${"─".repeat(22)}╯`]);
   } finally {
     undo();
   }
   assert.deepEqual(holder.render(24).map(plain), ["─".repeat(24), "pick", "─".repeat(24)]);
   assert.ok(chat.render(24).map(plain).includes("─".repeat(24)));
+  assert.ok(widgets.render(24).map(plain).includes("─".repeat(24)));
 });
 
 // --- Editor and footer ---

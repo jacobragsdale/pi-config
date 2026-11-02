@@ -1,10 +1,12 @@
 /**
  * One guest's view of a stream: a full-screen pi on the guest's SSH channel.
  * The layout is pi's own fullscreen layout, a scrolling transcript above a
- * fixed dock with the working indicator, the editor and the footer, drawn
- * with pi's components and theme. The transcript logic follows pi's
- * interactive mode: entries render as pi renders a resumed session, and the
- * streamed assistant message and running tools update in place like a live run.
+ * fixed dock with the editor and the footer, drawn with pi's components in the
+ * host's look: tools as cards, the editor in a frame whose top border shows
+ * the working status, and above it a card of the guest's own suggestions:
+ * queued, accepted or rejected. The transcript logic follows pi's interactive mode: entries render as pi renders
+ * a resumed session, and the streamed assistant message and running tools
+ * update in place like a live run.
  */
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage } from "@earendil-works/pi-ai";
@@ -24,29 +26,29 @@ import {
   createLsToolDefinition,
   createReadToolDefinition,
   createWriteToolDefinition,
+  defineTool,
   getMarkdownTheme,
   getSelectListTheme,
   parseSkillBlock
 } from "@earendil-works/pi-coding-agent";
-import { Container, Editor, Loader, ScrollView, Spacer, Text, TuiAltScreen, VStack, matchesKey } from "@earendil-works/pi-tui";
+import type { ToolRenderers } from "@earendil-works/pi-coding-agent";
+import { Container, Loader, ScrollView, Spacer, TuiAltScreen, VStack, matchesKey, truncateToWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { Component } from "@earendil-works/pi-tui";
+import { formatDuration, frame, toolCards } from "../extensions/look/card.ts";
+import { FramedEditor } from "../extensions/look/editor.ts";
+import type { BorderLabels } from "../extensions/look/editor.ts";
+import { printable, printableLine } from "../src/printable.ts";
 import type { SuggestionStatus } from "../src/protocol.ts";
-import { GuestFooter, thinkingLevel } from "./footer.ts";
+import { GuestFooter, editorLabels, thinkingLevel } from "./footer.ts";
+import { keybindings, piTheme } from "./look.ts";
+import { MAX_SUGGESTION_LENGTH, MAX_WAITING_PER_GUEST } from "./stream.ts";
 import type { Guest, ShownEntry, Stream, ToolState } from "./stream.ts";
+import { SuggestionCard } from "./suggestions.ts";
 import { ChannelTerminal } from "./terminal.ts";
 import type { Channel } from "./terminal.ts";
-import { piTheme } from "./theme.ts";
-
-const shortText = (text: string): string => {
-  const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length > 60 ? `${flat.slice(0, 59)}…` : flat;
-};
 
 /** Copy to the guest's own clipboard: OSC 52 asks their terminal to do it. */
 const osc52 = (text: string): string => `\x1b]52;c;${Buffer.from(text, "utf8").toString("base64")}\x07`;
-
-/** What ToolExecutionComponent takes to draw a tool's calls and results. */
-type ToolDefinition = NonNullable<ConstructorParameters<typeof ToolExecutionComponent>[4]>;
 
 /** A guest's SSH channel: a terminal, plus the calls that end the session. */
 export interface GuestChannel extends Channel {
@@ -80,17 +82,75 @@ class Guarded implements Component {
 }
 
 /** The renderers of pi's built-in tools, so guests see reads, edits and commands as the host does. */
-function builtInTools(cwd: string): ReadonlyMap<string, ToolDefinition> {
+function builtInTools(cwd: string): ReadonlyMap<string, ToolRenderers> {
+  // defineTool widens each tool's argument types, so its renderers fit the card's.
   const definitions = [
-    createReadToolDefinition(cwd),
-    createBashToolDefinition(cwd),
-    createEditToolDefinition(cwd),
-    createWriteToolDefinition(cwd),
-    createGrepToolDefinition(cwd),
-    createFindToolDefinition(cwd),
-    createLsToolDefinition(cwd)
+    defineTool(createReadToolDefinition(cwd)),
+    defineTool(createBashToolDefinition(cwd)),
+    defineTool(createEditToolDefinition(cwd)),
+    defineTool(createWriteToolDefinition(cwd)),
+    defineTool(createGrepToolDefinition(cwd)),
+    defineTool(createFindToolDefinition(cwd)),
+    defineTool(createLsToolDefinition(cwd))
   ];
   return new Map(definitions.map((definition) => [definition.name, definition]));
+}
+
+/** The width of the welcome card's column of keys. */
+const KEY_COLUMN = 11;
+/** A guest's name is cut to this many columns. */
+const NAME_WIDTH = 32;
+
+/** The card at the top of a guest's transcript: whose session this is, and the keys. Until they join, it asks for their name. */
+class Welcome implements Component {
+  public joined = false;
+  readonly #host: string;
+
+  constructor(host: string) {
+    this.#host = host;
+  }
+
+  public render(width: number): string[] {
+    const theme = piTheme();
+    const host = this.#host;
+    const intro = this.joined
+      ? [theme.bold(`You've joined ${host}'s pi session.`)]
+      : [theme.bold(`You're joining ${host}'s pi session.`), theme.fg("accent", `Type your name below and press Enter, so ${host} knows who joined.`)];
+    const keys: [string, string][] = [
+      ["Enter", this.joined ? `suggests a prompt to ${host}, who can run it or reject it` : "joins, with the name you typed"],
+      ["PgUp PgDn", "scroll, as does the mouse wheel"],
+      ["ctrl+o", "expands or collapses tool output"],
+      ["ctrl+c", "leaves"]
+    ];
+    const wrap = (text: string, room: number): string[] => wrapTextWithAnsi(text, Math.max(1, room));
+    // Each key's description wraps under itself, beside the key column.
+    const key = ([name, what]: [string, string], room: number): string[] =>
+      wrap(theme.fg("muted", what), room - KEY_COLUMN).map((part, i) => (i === 0 ? theme.fg("text", name.padEnd(KEY_COLUMN)) : " ".repeat(KEY_COLUMN)) + part);
+    const draw = (inner: number): string[] => [...intro.flatMap((line) => wrap(line, inner - 2)), "", ...keys.flatMap((entry) => key(entry, inner - 2))].map((line) => ` ${line}`);
+    return ["", ...frame(Math.min(width, 84), 1, (text) => theme.fg("borderMuted", text), draw, theme.fg("muted", "pi-live"))];
+  }
+
+  public invalidate(): void {
+    // Drawn from the theme on every frame.
+  }
+}
+
+/** pi's working spinner, for the editor's top border, as pi's own status indicator draws it there. */
+class WorkingStatus extends Loader {
+  public readonly kind = "working";
+
+  public renderInBorder(width: number): string {
+    const line = super.render(width + 2)[1] ?? "";
+    return truncateToWidth(line.startsWith(" ") ? line.slice(1).trimEnd() : line.trimEnd(), width, "");
+  }
+
+  public renderSpinnerInBorder(width: number): string {
+    return truncateToWidth(this.getRenderedIndicator(), width, "");
+  }
+
+  public dispose(): void {
+    this.stop();
+  }
 }
 
 function userText(message: AgentMessage): string {
@@ -118,19 +178,22 @@ export class Viewer implements Guest {
   readonly #terminal: ChannelTerminal;
   readonly #tui: TuiAltScreen;
   readonly #chat = new Container();
-  readonly #status = new Container();
-  readonly #feedback = new Text("", 1, 0);
-  readonly #editor: Editor;
+  readonly #welcome: Welcome;
+  readonly #suggestions: SuggestionCard;
+  readonly #editor: FramedEditor;
   readonly #wrappers = new Map<Component, Component>();
   readonly #pending = new Map<string, ToolExecutionComponent>();
+  /** How long each finished tool ran on the host, until its result entry arrives. */
+  readonly #durations = new Map<string, number>();
   readonly #expandables = new Set<Expandable>();
   readonly #number: number;
-  #loader: Loader | undefined;
-  #tools: ReadonlyMap<string, ToolDefinition> = new Map();
+  #loader: WorkingStatus | undefined;
+  #tools: ReadonlyMap<string, ToolRenderers> = new Map();
   #toolsCwd: string | undefined;
   #tail: { readonly timestamp: number; readonly component: AssistantMessageComponent; readonly tools: Map<string, ToolExecutionComponent> } | undefined;
   #expanded = false;
-  #watching = false;
+  /** When the guest gave their name and joined. */
+  #joinedAt: number | undefined;
   #closed = false;
 
   constructor(options: ViewerOptions) {
@@ -151,19 +214,23 @@ export class Viewer implements Guest {
         return Promise.resolve(true);
       }
     });
-    this.#editor = new Editor(this.#tui, { borderColor: theme.getThinkingBorderColor(thinkingLevel(this.#stream.meta.thinking)), selectList: getSelectListTheme() });
+    const editorTheme = { borderColor: theme.getThinkingBorderColor(thinkingLevel(this.#stream.meta.thinking)), selectList: getSelectListTheme() };
+    this.#editor = new FramedEditor(this.#tui, editorTheme, keybindings, () => this.#labels());
     this.#editor.onSubmit = (text): void => {
       this.#submit(text);
     };
-    const footer = new GuestFooter(() => ({ meta: this.#stream.meta, host: this.#stream.host, watching: this.#stream.guests.length }));
+    this.#welcome = new Welcome(this.#stream.host);
+    this.#suggestions = new SuggestionCard(this.#stream.host, (id) => this.#stream.ahead(id));
+    const gap = new Spacer(1);
+    const footer = new GuestFooter(() => ({ meta: this.#stream.meta, host: this.#stream.host, joined: this.#stream.guests.length }));
     const transcript = new ScrollView(this.#chat, { follow: "end", primary: true, overscroll: "chain", scrollbar: "auto" });
     const dock = new VStack([
-      { component: this.#status, shrink: 1, minSize: 0 },
-      { component: this.#feedback, shrink: 1, minSize: 0 },
+      { component: gap, shrink: 1, minSize: 0 },
+      { component: this.#suggestions, shrink: 1, minSize: 0 },
       { component: this.#editor, shrink: 1, minSize: 3 },
       { component: footer, shrink: 1, minSize: 0 }
     ]);
-    for (const component of [this.#chat, this.#status, this.#feedback, this.#editor, footer]) {
+    for (const component of [this.#chat, gap, this.#suggestions, this.#editor, footer]) {
       this.#tui.addChild(component);
     }
     this.#tui.setLayoutRoot(
@@ -174,37 +241,47 @@ export class Viewer implements Guest {
     );
     this.#tui.setFocus(this.#editor);
     this.#tui.addInputListener((data) => this.#onKey(data));
-    this.#header();
-    this.#chat.addChild(new Text(`Type your name so ${this.#stream.host} knows who's watching, then press Enter.`, 1, 0));
+    this.#chat.addChild(this.#welcome);
     this.#tui.start();
   }
 
-  #header(): void {
+  get #joined(): boolean {
+    return this.#joinedAt !== undefined;
+  }
+
+  #labels(): BorderLabels {
     const theme = piTheme();
-    const host = this.#stream.host;
-    const hints = [`Enter sends ${host} a suggestion`, "pgup/pgdn or the wheel scroll", "ctrl+o expands tools", "ctrl+c leaves"];
-    this.#chat.addChild(new Text(`${theme.bold(theme.fg("accent", "pi-live"))} ${theme.fg("dim", `· watching ${host}'s pi session`)}\n${theme.fg("dim", hints.join(" · "))}`, 1, 1));
+    const placeholder = this.#joined ? `Suggest a prompt to ${this.#stream.host} · Enter sends · ctrl+c leaves` : "Type your name, then Enter to join";
+    return { ...editorLabels(theme, this.#stream.meta), placeholder: theme.fg("dim", placeholder) };
   }
 
   #submit(text: string): void {
-    if (this.#watching) {
+    if (this.#closed) {
+      return;
+    }
+    if (this.#joined) {
       this.#suggest(text);
       return;
     }
-    const name = text.trim().slice(0, 32);
+    const name = truncateToWidth(printableLine(text), NAME_WIDTH, "");
     this.name = name === "" ? `guest-${String(this.#number)}` : name;
-    this.#watching = true;
+    this.#joinedAt = Date.now();
+    this.#welcome.joined = true;
+    this.#suggestions.joinedAs(this.name);
     this.#stream.join(this);
     this.reset();
     this.activity();
   }
 
   #onKey(data: string): { consume: boolean } | undefined {
+    if (this.#closed) {
+      return { consume: true };
+    }
     if (matchesKey(data, "ctrl+c") || (matchesKey(data, "ctrl+d") && this.#editor.getText() === "")) {
       this.#close("You left the stream.");
       return { consume: true };
     }
-    if (matchesKey(data, "ctrl+o") && this.#watching) {
+    if (matchesKey(data, "ctrl+o") && this.#joined) {
       this.#expanded = !this.#expanded;
       for (const component of this.#expandables) {
         component.setExpanded(this.#expanded);
@@ -216,27 +293,32 @@ export class Viewer implements Guest {
   }
 
   #suggest(value: string): void {
-    const text = value.trim();
+    const text = printable(value).trim();
     if (text === "") {
       return;
     }
-    const theme = piTheme();
-    const host = this.#stream.host;
-    if (this.#stream.suggest(this, text) === "too-many") {
+    // Either way, what they typed stays in their editor for later.
+    if (text.length > MAX_SUGGESTION_LENGTH) {
       this.#editor.setText(value);
-      this.#feedback.setText(theme.fg("warning", `You have 3 suggestions waiting. Wait for ${host} to get to them.`));
+      this.#suggestions.refuse(`That's ${text.length.toLocaleString("en-US")} characters; a suggestion can be at most ${MAX_SUGGESTION_LENGTH.toLocaleString("en-US")}.`);
     } else {
-      this.#feedback.setText(theme.fg("dim", `Sent to ${host}: "${shortText(text)}". It waits above their editor until they use or dismiss it.`));
+      const id = this.#stream.suggest(this, text);
+      if (id === undefined) {
+        this.#editor.setText(value);
+        this.#suggestions.refuse(`${String(MAX_WAITING_PER_GUEST)} queued · send more once ${this.#stream.host} answers one`);
+      } else {
+        this.#suggestions.add(id, text);
+      }
     }
     this.#tui.requestRender();
   }
 
-  public suggestionStatus(text: string, status: SuggestionStatus): void {
-    const theme = piTheme();
-    const host = this.#stream.host;
-    this.#feedback.setText(
-      status === "used" ? theme.fg("success", `✓ ${host} took your suggestion: "${shortText(text)}"`) : theme.fg("dim", `${host} dismissed your suggestion: "${shortText(text)}"`)
-    );
+  public suggestionStatus(id: string, status: SuggestionStatus): void {
+    this.#suggestions.answer(id, status);
+    this.#tui.requestRender();
+  }
+
+  public queue(): void {
     this.#tui.requestRender();
   }
 
@@ -247,19 +329,19 @@ export class Viewer implements Guest {
   // Dock
 
   public activity(): void {
-    if (!this.#watching) {
+    if (!this.#joined) {
       return;
     }
     if (this.#stream.working && this.#loader === undefined) {
       const theme = piTheme();
-      this.#loader = new Loader(
+      this.#loader = new WorkingStatus(
         this.#tui,
         (text) => theme.fg("accent", text),
         (text) => theme.fg("muted", text),
         "Working"
       );
       this.#loader.start();
-      this.#status.addChild(this.#loader);
+      this.#editor.setWorkingStatusIndicator(this.#loader);
     } else if (!this.#stream.working && this.#loader !== undefined) {
       this.#stopLoader();
     }
@@ -267,9 +349,9 @@ export class Viewer implements Guest {
   }
 
   #stopLoader(): void {
-    this.#loader?.stop();
+    this.#loader?.dispose();
     this.#loader = undefined;
-    this.#status.clear();
+    this.#editor.setWorkingStatusIndicator(undefined);
   }
 
   public footer(): void {
@@ -280,15 +362,17 @@ export class Viewer implements Guest {
   // Transcript
 
   public reset(): void {
-    if (!this.#watching) {
+    if (!this.#joined) {
       return;
     }
+    this.#settleTools();
     this.#chat.clear();
     this.#wrappers.clear();
     this.#pending.clear();
+    this.#durations.clear();
     this.#expandables.clear();
     this.#tail = undefined;
-    this.#header();
+    this.#chat.addChild(this.#welcome);
     for (const entry of this.#stream.entries) {
       this.#addMessages(entry.messages);
     }
@@ -300,7 +384,7 @@ export class Viewer implements Guest {
   }
 
   public append(entries: readonly ShownEntry[]): void {
-    if (!this.#watching) {
+    if (!this.#joined) {
       return;
     }
     for (const entry of entries) {
@@ -310,7 +394,7 @@ export class Viewer implements Guest {
   }
 
   public tail(): void {
-    if (!this.#watching) {
+    if (!this.#joined) {
       return;
     }
     const message = this.#stream.tail;
@@ -347,10 +431,13 @@ export class Viewer implements Guest {
   public tool(id: string): void {
     const state = this.#stream.tools.get(id);
     const component = this.#pending.get(id);
-    if (!this.#watching || state === undefined || component === undefined) {
+    if (!this.#joined || state === undefined || component === undefined) {
       return;
     }
     applyTool(component, state);
+    if (state.end?.durationMs !== undefined) {
+      this.#durations.set(id, state.end.durationMs);
+    }
     this.#tui.requestRender();
   }
 
@@ -367,9 +454,10 @@ export class Viewer implements Guest {
         this.#addAssistant(message);
         break;
       case "toolResult": {
-        const component = this.#pending.get(message.toolCallId);
-        component?.updateResult(message);
+        const durationMs = this.#durations.get(message.toolCallId);
+        this.#pending.get(message.toolCallId)?.updateResult(durationMs === undefined ? message : { ...message, durationMs });
         this.#pending.delete(message.toolCallId);
+        this.#durations.delete(message.toolCallId);
         break;
       }
       case "user":
@@ -454,10 +542,18 @@ export class Viewer implements Guest {
     }
     this.#remove(this.#tail.component);
     for (const [id, component] of this.#tail.tools) {
+      settle(component);
       this.#remove(component);
       this.#pending.delete(id);
     }
     this.#tail = undefined;
+  }
+
+  /** Stop the clocks of tools still waiting for a result, before their cards are dropped. */
+  #settleTools(): void {
+    for (const component of this.#pending.values()) {
+      settle(component);
+    }
   }
 
   #newTool(name: string, id: string, args: unknown): ToolExecutionComponent {
@@ -466,7 +562,8 @@ export class Viewer implements Guest {
       this.#tools = builtInTools(cwd);
       this.#toolsCwd = cwd;
     }
-    const component = new ToolExecutionComponent(name, id, args, { showImages: false }, this.#tools.get(name), this.#tui, cwd);
+    const renderers = toolCards(name, () => this.#tools.get(name));
+    const component = new ToolExecutionComponent(name, id, args, { showImages: false }, renderers, this.#tui, cwd);
     this.#addExpandable(component);
     return component;
   }
@@ -505,24 +602,37 @@ export class Viewer implements Guest {
     }
     this.#closed = true;
     this.#stopLoader();
+    this.#settleTools();
     this.#terminal.close();
-    this.#tui.stop();
+    this.#tui.stop({ preserveScreen: true });
     this.#stream.leave(this);
   }
 
+  /** Leave the full-screen view, so the guest's terminal shows what it did before they joined, then say why. */
   #close(reason: string): void {
     if (this.#closed) {
       return;
     }
     this.#closed = true;
     this.#stopLoader();
+    this.#settleTools();
     this.#stream.leave(this);
-    this.#tui.stop();
-    this.#terminal.write(`${reason}\r\n`);
+    this.#tui.stop({ preserveScreen: true });
+    const stayed = this.#joinedAt === undefined ? "" : piTheme().fg("dim", ` You were in it for ${formatDuration(Date.now() - this.#joinedAt)}.`);
+    this.#terminal.write(`${reason}${stayed}\r\n`);
     this.#terminal.close();
     this.#channel.exit(0);
     this.#channel.end();
   }
+}
+
+/**
+ * Give a tool that will never get its result here a final one. A running
+ * tool's card keeps a clock ticking until its result arrives, and the clock
+ * would keep the whole view alive after the guest left.
+ */
+function settle(component: ToolExecutionComponent): void {
+  component.updateResult({ content: [], isError: false }, false);
 }
 
 function applyTool(component: ToolExecutionComponent, state: ToolState): void {

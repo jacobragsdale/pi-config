@@ -7,10 +7,10 @@ Team settings, extensions and skills for the [pi](https://pi.dev) coding agent, 
 - **Copilot defaults:** Claude Haiku 5.5 with xhigh thinking, Ctrl+P to switch to GPT-6.1 Sol with high thinking, and context windows capped at each model's price threshold so long sessions don't drift onto long-context rates. See [docs/models.md](docs/models.md).
 - **Spending limits:** soft limits of $500 a calendar month and $40 a day, with your spend and the month's pace shown in pi's footer. See [Spending limits](#spending-limits).
 - **System prompt:** a short prompt that replaces pi's default, with rules for reaching work systems through agent-cli. See [System prompt](#system-prompt).
-- **Look:** light and dark themes after shadcn/ui, tool calls and prompts drawn as cards, the editor in a rounded frame that shows the model and context use, and a one-line status bar. See [Look](#look).
+- **Look:** a dark theme after shadcn/ui, tool calls and prompts drawn as cards, the editor in a rounded frame that shows the model and context use, and a one-line status bar. See [Look](#look).
 - **Team skills:** `/skill:dev-start`, `/skill:dev-finish` and five more carry an Azure DevOps work item from start to merge through agent-cli. See [Team skills](#team-skills).
 - **Prompt sharing:** `/submit-prompt` lets you volunteer a session's prompts for team review. See [Sharing prompts](#sharing-prompts).
-- **Live sessions:** `/live` streams your session to colleagues, who join with one `ssh` command and can suggest prompts that you choose whether to send. It needs a relay, which this repo also holds. See [docs/live/README.md](docs/live/README.md).
+- **Live sessions:** `/live` streams your session to colleagues, who join with one `ssh` command and can suggest prompts, which run only if you accept them. It needs a relay, which this repo also holds. See [docs/live/README.md](docs/live/README.md).
 - **No accidental uploads:** pi's built-in `/share` no longer falls back to a GitHub gist.
 - **Update checks:** once a day, pi checks this clone for new commits and tells you to run `/pi-config-update`.
 
@@ -58,7 +58,7 @@ To add your own instructions, write them in `~/.pi/agent/APPEND_SYSTEM.md`; pi a
 
 ## Look
 
-The `shadcn-light` and `shadcn-dark` themes follow [shadcn/ui](https://ui.shadcn.com)'s neutral palette: grays, text close to white or black, and color kept for success, failure, links and code. The team setting `"theme": "shadcn-light/shadcn-dark"` makes pi use whichever matches your terminal's background. Both assume a background close to shadcn's: near-black, like Windows Terminal's default, or white.
+The `shadcn-dark` theme follows [shadcn/ui](https://ui.shadcn.com)'s neutral palette: grays, text close to white, and color kept for success, failure, links and code. The team setting `"theme": "shadcn-dark"` picks it. It assumes a background close to shadcn's near-black, like Windows Terminal's default. Guests of a `/live` stream see the same theme.
 
 The `look` extension changes shapes, not colors, so it works with any theme:
 
@@ -211,8 +211,8 @@ The team keys win each time `install.sh` runs, so change a team setting for a si
 | Team spending limits                     | `extensions/budget/defaults.json`                                                                          |
 | Team system prompt                       | `agent/SYSTEM.md`                                                                                          |
 | Extensions                               | `extensions/<name>/index.ts`                                                                               |
-| Colors                                   | `themes/shadcn-dark.json` and `themes/shadcn-light.json`, then `/reload`                                   |
-| Cards, the editor frame, footer          | `extensions/look/`                                                                                         |
+| Colors                                   | `themes/shadcn-dark.json`, then `/reload`; rebuild the relay image for guests                              |
+| Cards, the editor frame, footer          | `extensions/look/`; rebuild the relay image for guests                                                     |
 | The pi-live relay                        | `relay/`, then rebuild its image: see `docs/live/deploy.md`                                                |
 | The relay's deployment                   | `Dockerfile`, and `deploy/k8s/`, whose real values are in the team's private copy only                     |
 | Team skills                              | `skills/dev-<name>/SKILL.md`, their scripts and references in `shared/`, and a note in `fixtures/<skill>/` |

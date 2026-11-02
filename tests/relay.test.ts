@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createConnection } from "node:net";
 import { afterEach, beforeEach, test } from "node:test";
 import ssh2 from "ssh2";
 import { newHostKey } from "../relay/relay.ts";
@@ -29,9 +30,9 @@ async function host(name = "jacob"): Promise<{ host: FakeHost; token: string; jo
 async function guest(token: string, name = "alice"): Promise<Guest> {
   const joined = await Guest.connect(relay.ssh, token);
   open.push(joined);
-  await joined.sees("Type your name");
+  await joined.sees("Type your name below");
   joined.type(`${name}\r`);
-  await joined.sees("1 watching");
+  await joined.sees("Suggest a prompt to");
   return joined;
 }
 
@@ -62,10 +63,10 @@ await test("a guest sees the transcript, the streamed reply, and who is hosting"
   );
   fake.send({ type: "reset", entries: [{ id: "a", messages: [user("Fix the login bug")] }] });
   const alice = await guest(token);
-  await alice.sees("Fix the login bug");
-  await alice.sees("~/dev/shop (main)");
-  await alice.sees(/↑2\.8k ↓40 R97k W75 CH97\.3% \$0\.012 12\.5%\/84k \(auto\) +\(github-copilot\) claude-haiku-5\.5 • xhigh/);
-  await alice.sees("● live · jacob's session · 1 watching");
+  await alice.sees("│ Fix the login bug");
+  await alice.sees(/~\/dev\/shop · main +● live · jacob · 1 joined · ↑2\.8k ↓40 R97k W75 CH97\.3% · \$0\.012/);
+  await alice.sees(/╰─ claude-haiku-5\.5 · xhigh ─+ 13% of 84k ─╯/);
+  await alice.sees("Suggest a prompt to jacob · Enter sends · ctrl+c leaves");
 
   fake.send({ type: "tail", message: assistant([{ type: "text", text: "Looking at the session code" }], 5, "pending") });
   await alice.sees("Looking at the session code");
@@ -74,7 +75,7 @@ await test("a guest sees the transcript, the streamed reply, and who is hosting"
   await alice.sees("Found it: the cookie expires early.");
 });
 
-await test("the host learns who is watching, and a guest's suggestion round-trips", async () => {
+await test("the host learns who joined, and a guest sees what became of their suggestion", async () => {
   const { host: fake, token } = await host();
   fake.send({ type: "reset", entries: [] });
   const alice = await guest(token);
@@ -85,10 +86,38 @@ await test("the host learns who is watching, and a guest's suggestion round-trip
   assert.equal(suggestion.type, "suggestion");
   assert.equal(suggestion.from, "alice");
   assert.equal(suggestion.text, "run the migration tests");
-  await alice.sees("It waits above their editor");
+  await alice.sees(/╭─+ your suggestions ─╮/);
+  await alice.sees(/│ ○ queued +run the migration tests · next up +│/);
 
   fake.send({ type: "suggestion_status", id: suggestion.id, status: "used" });
-  await alice.sees('✓ jacob took your suggestion: "run the migration tests"');
+  await alice.sees(/│ ✓ accepted +run the migration tests +│/);
+
+  alice.type("drop the old table\r");
+  const second = await fake.waitFor((m) => m.type === "suggestion" && m.text === "drop the old table", "second suggestion");
+  assert.equal(second.type, "suggestion");
+  await alice.sees(/○ queued +drop the old table · next up/);
+  fake.send({ type: "suggestion_status", id: second.id, status: "dismissed" });
+  await alice.sees(/│ ✗ rejected +drop the old table +│/);
+  assert.ok(!alice.screen.includes("✓ accepted"), `the card kept an older answer:\n${alice.screen}`);
+});
+
+await test("a guest sees how many suggestions wait ahead of theirs, and moves up as the host answers", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const alice = await guest(token);
+  alice.type("first\r");
+  const first = await fake.waitFor((m) => m.type === "suggestion" && m.text === "first", "alice's suggestion");
+  const bob = await guest(token, "bob");
+  bob.type("second\r");
+  await fake.waitFor((m) => m.type === "suggestion" && m.text === "second", "bob's suggestion");
+  await bob.sees(/○ queued +second · 1 ahead/);
+  alice.close();
+  await fake.waitFor((m) => m.type === "guests" && m.names.join() === "bob", "alice gone");
+  // The host still has alice's suggestion, so bob's is still second.
+  await bob.sees(/○ queued +second · 1 ahead/);
+  assert.equal(first.type, "suggestion");
+  fake.send({ type: "suggestion_status", id: first.id, status: "dismissed" });
+  await bob.sees(/○ queued +second · next up/);
 });
 
 await test("a guest can have only three suggestions waiting", async () => {
@@ -98,11 +127,117 @@ await test("a guest can have only three suggestions waiting", async () => {
   for (const text of ["one", "two", "three", "four"]) {
     alice.type(`${text}\r`);
   }
-  await alice.sees("You have 3 suggestions waiting");
+  await alice.sees("3 queued · send more once jacob answers one");
+  assert.match(alice.screen, /│ four/);
   await eventually(
     () => (fake.received.filter((m) => m.type === "suggestion").length === 3 ? true : undefined),
     () => "three suggestions"
   );
+});
+
+await test("a guest is asked for their name first, then told whom they joined as and what Enter now does", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const joining = await Guest.connect(relay.ssh, token);
+  open.push(joining);
+  await joining.sees("Enter      joins, with the name you typed");
+  assert.ok(!joining.screen.includes("suggests a prompt"), joining.screen);
+  joining.type("hello!\r");
+  await joining.sees("✓ Joined as hello! · type a prompt below and press Enter to suggest it to jacob");
+  await joining.sees("Enter      suggests a prompt to jacob, who can run it or reject it");
+  joining.type("run the tests\r");
+  await joining.sees(/○ queued +run the tests · next up/);
+  assert.ok(!joining.screen.includes("Joined as"), joining.screen);
+});
+
+await test("a pasted name becomes one line, and neither names nor suggestions carry control characters", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const pasted = await Guest.connect(relay.ssh, token);
+  open.push(pasted);
+  await pasted.sees("Type your name below");
+  // \u009b is CSI as one character, which some terminals act on.
+  pasted.type("\x1b[200~ali\nce\u009b2J\x1b[201~\r");
+  const guests = await fake.waitFor((m) => m.type === "guests" && m.names.length === 1, "one guest");
+  assert.deepEqual(guests.type === "guests" ? guests.names : [], ["ali ce2J"]);
+  pasted.type("\x1b[200~line one\nline\u009d52;c;aGk=\u009c two\x1b[201~\r");
+  const suggestion = await fake.waitFor((m) => m.type === "suggestion", "suggestion");
+  assert.equal(suggestion.type === "suggestion" ? suggestion.text : "", "line one\nline52;c;aGk= two");
+});
+
+await test("keys that arrive after a guest leaves neither rejoin them nor suggest anything", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const quick = await Guest.connect(relay.ssh, token);
+  open.push(quick);
+  await quick.sees("Type your name below");
+  quick.type("\x03bob\r");
+  await quick.waitForEnd();
+  const alice = await guest(token);
+  await fake.waitFor((m) => m.type === "guests" && m.names.join() === "alice", "alice alone");
+  alice.type("\x03do it\r");
+  await alice.waitForEnd();
+  await fake.waitFor((m) => m.type === "guests" && m.names.length === 0, "nobody");
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, 200);
+  });
+  assert.ok(!fake.received.some((m) => (m.type === "guests" && m.names.includes("bob")) || m.type === "suggestion"), JSON.stringify(fake.received));
+});
+
+await test("a guest still typing their name sees how many have joined", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const naming = await Guest.connect(relay.ssh, token);
+  open.push(naming);
+  await naming.sees("· 0 joined");
+  await guest(token);
+  await naming.sees("· 1 joined");
+});
+
+await test("a suggestion longer than the limit stays in the guest's editor, with the reason", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  const alice = await guest(token);
+  alice.type(`\x1b[200~${"y".repeat(4500)}\x1b[201~\r`);
+  await alice.sees("That's 4,500 characters; a suggestion can be at most 4,000.");
+  assert.match(alice.screen, /│ y{20}/);
+  assert.ok(!fake.received.some((m) => m.type === "suggestion"));
+});
+
+await test("escape sequences a host sends never reach guests' terminals", async () => {
+  const { host: fake, token } = await host();
+  fake.send(meta({ gitBranch: "main\n\x1b[2J", sessionName: "a\x1b]0;owned\x07b" }));
+  fake.send({ type: "reset", entries: [{ id: "a", messages: [user("before\x1b[2J\x1b[Hafter \x1b]52;c;aGk=\x07end")] }] });
+  const alice = await guest(token);
+  await alice.sees("│ beforeafter end");
+  const lines = alice.screen.trimEnd().split("\n");
+  assert.match(lines.at(-1) ?? "", /~\/dev\/shop · main · ab +● live · jacob · 1 joined/);
+});
+
+/** Send `request` to the relay's HTTP port as raw bytes, and resolve with everything it answers. */
+function rawHttp(request: string): Promise<string> {
+  return new Promise((resolve) => {
+    let reply = "";
+    const socket = createConnection(relay.http, "127.0.0.1", () => {
+      socket.write(request);
+    });
+    socket.on("data", (data: Buffer) => {
+      reply += data.toString("utf8");
+    });
+    socket.on("close", () => {
+      resolve(reply);
+    });
+    socket.on("error", () => {
+      resolve(reply);
+    });
+  });
+}
+
+await test("a request whose URL can't be read is refused, and the relay keeps running", async () => {
+  assert.match(await rawHttp("GET http://%zz/ HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n"), /^HTTP\/1\.1 404/);
+  await rawHttp("GET http://%zz/host HTTP/1.1\r\nHost: x\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n");
+  const { join } = await host();
+  assert.match(join, /^ssh -p \d+ [a-z2-7]{24}@127\.0\.0\.1$/);
 });
 
 await test("a tool call shows its command, its live output, and its result", async () => {
@@ -121,6 +256,17 @@ await test("a tool call shows its command, its live output, and its result", asy
     entries: [{ id: "b", messages: [{ role: "toolResult", toolCallId: "call-1", toolName: "bash", content: [{ type: "text", text: "12 passed" }], isError: false, timestamp: 4 }] }]
   });
   await alice.sees("12 passed");
+  await alice.sees(/╭─+ ✓ 1\.2s ─╮/);
+
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${String(i)}`).join("\n");
+  fake.send({ type: "append", entries: [{ id: "c", messages: [assistant([{ type: "toolCall", id: "call-2", name: "bash", arguments: { command: "seq 30" } }], 5, "toolUse")] }] });
+  fake.send({
+    type: "append",
+    entries: [{ id: "d", messages: [{ role: "toolResult", toolCallId: "call-2", toolName: "bash", content: [{ type: "text", text: lines }], isError: false, timestamp: 6 }] }]
+  });
+  await alice.sees("ctrl+o to expand");
+  alice.type("\x0f"); // ctrl+o
+  await alice.sees("line 0");
 });
 
 await test("a guest who joins mid-run catches up on the streamed reply", async () => {
@@ -148,12 +294,25 @@ await test("when the host leaves, guests are told and disconnected", async () =>
   fake.send({ type: "reset", entries: [] });
   const alice = await guest(token);
   fake.close();
-  await alice.sees("sam ended the stream.");
+  await alice.sees(/sam ended the stream\. You were in it for \d/);
   await alice.waitForEnd();
+  assert.ok(!/live|joined|╭/.test(alice.screen.replace(/sam ended the stream\. You were in it for [\d.ms ]+\./, "")), `the stream's screen was left behind:\n${alice.screen}`);
   const late = await Guest.connect(relay.ssh, token);
   open.push(late);
   await late.sees("This pi-live link has ended");
   await late.waitForEnd();
+});
+
+await test("a guest still typing their name hears when the host leaves", async () => {
+  const { host: fake, token } = await host("sam");
+  fake.send({ type: "reset", entries: [] });
+  const naming = await Guest.connect(relay.ssh, token);
+  open.push(naming);
+  await naming.sees("Type your name below");
+  fake.close();
+  await naming.sees("sam ended the stream.");
+  await naming.waitForEnd();
+  assert.ok(!naming.screen.includes("You were in it"), naming.screen);
 });
 
 await test("a guest can leave with ctrl+c", async () => {
@@ -162,7 +321,7 @@ await test("a guest can leave with ctrl+c", async () => {
   const alice = await guest(token);
   await fake.waitFor((m) => m.type === "guests" && m.names.length === 1, "one guest");
   alice.type("\x03");
-  await alice.sees("You left the stream.");
+  await alice.sees(/You left the stream\. You were in it for \d/);
   await alice.waitForEnd();
   await fake.waitFor((m) => m.type === "guests" && m.names.length === 0, "no guests");
 });
@@ -186,7 +345,8 @@ await test("an empty name becomes guest-N", async () => {
   fake.send({ type: "reset", entries: [] });
   const joined = await Guest.connect(relay.ssh, token);
   open.push(joined);
-  await joined.sees("Type your name");
+  await joined.sees("Type your name below");
+  await joined.sees("Type your name, then Enter");
   joined.type("\r");
   const guests = await fake.waitFor((m) => m.type === "guests" && m.names.length === 1, "one guest");
   assert.equal(guests.type, "guests");
@@ -222,4 +382,22 @@ await test("a guest scrolls the transcript with PgUp, the mouse wheel, and ctrl+
     () => (alice.screen.includes("message number 59") ? undefined : true),
     () => `the wheel didn't scroll:\n${alice.screen}`
   );
+});
+
+await test("a guest whose terminal claims to be a few columns wide can type wide characters without ending the relay", async () => {
+  const { host: fake, token } = await host();
+  fake.send({ type: "reset", entries: [] });
+  for (const cols of [1, 2, 3, 5]) {
+    const narrow = await Guest.connect(relay.ssh, token, { cols, rows: 10 });
+    open.push(narrow);
+    narrow.type("名前");
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 100);
+    });
+    narrow.close();
+  }
+  // A stack overflow in a guest's drawing would have ended this process by now.
+  const alice = await guest(token);
+  alice.type("still here\r");
+  await fake.waitFor((m) => m.type === "suggestion" && m.text === "still here", "suggestion");
 });

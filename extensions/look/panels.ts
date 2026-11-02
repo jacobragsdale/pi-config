@@ -2,9 +2,11 @@
  * What pi puts in the editor's place, such as /model, /resume, /tree,
  * /settings, /login and extensions' dialogs, drawn in a rounded frame like
  * the editor's; and the blocks pi writes into the chat between two rules,
- * such as /hotkeys, /changelog and update notices, framed instead. pi builds
- * both from plain containers, so this wraps the editor's container and the
- * chat's render while a session runs.
+ * such as /hotkeys, /changelog and update notices, framed instead, as are
+ * extensions' widgets above the editor that are drawn between two rules,
+ * such as /live's. pi builds all three from plain containers, so this wraps
+ * the editor's container, the widgets' and the chat's render while a session
+ * runs.
  */
 import { DynamicBorder } from "@earendil-works/pi-coding-agent";
 import type { Theme } from "@earendil-works/pi-coding-agent";
@@ -100,6 +102,19 @@ export function renderFramingRuns(container: Container, width: number): string[]
   return lines;
 }
 
+/** The widgets in `container`, each drawn as renderFramingRuns draws a container. */
+export function renderFramedWidgets(container: Container, width: number): string[] {
+  const lines: string[] = [];
+  const layout: { component: Component; height: number }[] = [];
+  for (const widget of container.children) {
+    const drawn = widget instanceof Container ? renderFramingRuns(widget, width) : widget.render(width);
+    layout.push({ component: widget, height: drawn.length });
+    lines.push(...drawn);
+  }
+  Reflect.set(container, "mouseLayout", { width, children: layout });
+  return lines;
+}
+
 /** Frame what pi shows in place of `editor`, and the chat's ruled blocks, until the returned function puts pi's drawing back. */
 export function framePanels(tui: Pick<TUI, "children">, editor: Component, theme: () => Theme): () => void {
   const restores: (() => void)[] = [];
@@ -126,6 +141,12 @@ export function framePanels(tui: Pick<TUI, "children">, editor: Component, theme
         return callMethod(handleMouse, holder, [moved]);
       })
     );
+  }
+  // pi stacks the widgets shown above the editor just before the editor's container.
+  const widgets = holder === undefined ? undefined : tui.children[tui.children.indexOf(holder) - 1];
+  if (widgets instanceof Container) {
+    const render: unknown = Reflect.get(widgets, "render");
+    restores.push(swapProperty(widgets, "render", (width: number): unknown => (width < MIN_WIDTH ? callMethod(render, widgets, [width]) : renderFramedWidgets(widgets, width))));
   }
   // pi's document holds the header, the loaded resources and, last, the chat.
   const [document] = tui.children;

@@ -4,7 +4,7 @@
  * context use, unless it is showing how many lines are hidden below.
  */
 import { CustomEditor } from "@earendil-works/pi-coding-agent";
-import type { KeybindingsManager } from "@earendil-works/pi-coding-agent";
+import type { KeybindingsManager, Theme } from "@earendil-works/pi-coding-agent";
 import { renderFakeCursor, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { EditorTheme, TUI } from "@earendil-works/pi-tui";
 
@@ -19,6 +19,32 @@ export interface BorderLabels {
   readonly right: string;
   /** Dim text shown while the editor is empty. */
   readonly placeholder: string;
+}
+
+/** Compact token counts, as pi's footer shows them: 940, 2.8k, 97k, 1.0M. */
+export function compactTokens(count: number): string {
+  if (count < 1000) {
+    return String(count);
+  }
+  if (count < 10_000) {
+    return `${(count / 1000).toFixed(1)}k`;
+  }
+  if (count < 1_000_000) {
+    return `${String(Math.round(count / 1000))}k`;
+  }
+  return `${(count / 1_000_000).toFixed(1)}M`;
+}
+
+/** "12% of 128k", turning to the warning color above 70% and the error color above 90%, as pi's footer does. */
+export function contextLabel(theme: Theme, percent: number | null, window: number): string {
+  if (window <= 0) {
+    return "";
+  }
+  if (percent === null) {
+    return theme.fg("muted", `? of ${compactTokens(window)}`);
+  }
+  const text = `${String(Math.round(percent))}% of ${compactTokens(window)}`;
+  return theme.fg(percent > 90 ? "error" : percent > 70 ? "warning" : "muted", text);
 }
 
 /** A border of `width` columns with `left` and `right` set into it. When both don't fit, `right` goes, then `left` is shortened. */

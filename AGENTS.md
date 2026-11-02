@@ -19,7 +19,7 @@ This repository is public on GitHub. The team works in a private Azure DevOps co
 ## Verify
 
 - Extensions: `npm test` drives real pi processes in RPC mode against `tests/fixtures/scripted-provider.ts`, in throwaway agent directories.
-- The look: RPC mode draws nothing, so `tests/look.test.ts` renders the cards and borders directly at fixed widths. Before shipping a shape change, look at every screen pi can show in a real terminal, in both themes and at a narrow width, not only the one that changed.
+- The look: RPC mode draws nothing, so `tests/look.test.ts` renders the cards and borders directly at fixed widths. Before shipping a shape change, look at every screen pi can show in a real terminal, at a normal and a narrow width, not only the one that changed.
 - At work: `node scripts/smoke-copilot.mjs` makes one tiny real request.
 - Skills: three real runs at work, as under Rules.
 
@@ -41,6 +41,7 @@ The reasons behind the skill rules are in [docs/skills/design.md](docs/skills/de
 ## Gotchas
 
 - The relay pins pi's version. When pi upgrades, bump `relay/package.json` and the root `devDependencies` together, then rebuild the relay image.
+- The relay draws guests' screens with `themes/shadcn-dark.json` and `extensions/look/`, and imports pi's unexported theme loader and key bindings by path (`relay/look.ts`). After changing the look, or upgrading pi, check a guest's screen too, and rebuild the relay image.
 - Prettier skips `skills/`, `shared/`, `fixtures/`, `templates/` and `docs/skills/`. Their compact tables are on purpose: a skill's text is paid for on every run.
 - ESLint skips `templates/`, the lint baselines this repository hands to other repositories.
 - In pi a skill runs as `/skill:dev-<name>`, not `/dev-<name>`.

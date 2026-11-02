@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { SessionEntry } from "@earendil-works/pi-coding-agent";
-import { catchUp, toEntry } from "../extensions/live/transcript.ts";
+import { catchUp, inParts, toEntry } from "../extensions/live/transcript.ts";
 
 const at = "2026-10-27T12:00:00.000Z";
 
@@ -40,4 +40,17 @@ await test("a different branch resends everything, even when it is empty", () =>
     ["a", "b"]
   );
   assert.deepEqual(catchUp(["a"], []), { type: "reset", entries: [] });
+});
+
+await test("a change too big for one message is sent in parts that append to the first", () => {
+  const entries = ["a", "b", "c"].map((id) => ({ id, messages: [{ role: "user", content: "x".repeat(100), timestamp: 1 }] }));
+  const parts = inParts({ type: "reset", entries }, 350);
+  assert.deepEqual(
+    parts.map((part) => [part.type, part.entries.map((entry) => entry.id).join("")]),
+    [
+      ["reset", "ab"],
+      ["append", "c"]
+    ]
+  );
+  assert.deepEqual(inParts({ type: "reset", entries: [] }), [{ type: "reset", entries: [] }]);
 });

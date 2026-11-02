@@ -3,48 +3,24 @@
  * send and pi's skill and summary blocks are cards in rounded frames; so are
  * Markdown tables and code blocks, selectors and dialogs, and pi's ruled chat
  * blocks. The editor's frame shows the model, thinking level and context use
- * in its bottom border, and the footer is one status line. The colors are the
- * shadcn-dark and shadcn-light themes in themes/; this extension changes only
- * shapes, so it works with any theme.
+ * in its bottom border, and the footer is one status line. Extensions' widgets
+ * above the editor that pi would draw between two rules are framed too. The
+ * colors are the shadcn-dark theme in themes/; this extension changes only
+ * shapes, so it works with any theme. The pi-live relay draws guests' screens
+ * with the same shapes.
  *
  * PI_LOOK=0 turns it off.
  */
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import type { TUI } from "@earendil-works/pi-tui";
 import { toolCards } from "./card.ts";
-import { FramedEditor } from "./editor.ts";
+import { FramedEditor, contextLabel } from "./editor.ts";
 import type { BorderLabels } from "./editor.ts";
 import { StatusBar } from "./footer.ts";
 import { frameMarkdown } from "./markdown.ts";
 import { frameMessages } from "./messages.ts";
 import { framePanels } from "./panels.ts";
 import { restoreAll } from "./swap.ts";
-
-/** Compact token counts, as pi's footer shows them: 940, 2.8k, 97k, 1.0M. */
-export function compactTokens(count: number): string {
-  if (count < 1000) {
-    return String(count);
-  }
-  if (count < 10_000) {
-    return `${(count / 1000).toFixed(1)}k`;
-  }
-  if (count < 1_000_000) {
-    return `${String(Math.round(count / 1000))}k`;
-  }
-  return `${(count / 1_000_000).toFixed(1)}M`;
-}
-
-/** "12% of 128k", turning to the warning color above 70% and the error color above 90%, as pi's footer does. */
-export function contextLabel(theme: Theme, percent: number | null, window: number): string {
-  if (window <= 0) {
-    return "";
-  }
-  if (percent === null) {
-    return theme.fg("muted", `? of ${compactTokens(window)}`);
-  }
-  const text = `${String(Math.round(percent))}% of ${compactTokens(window)}`;
-  return theme.fg(percent > 90 ? "error" : percent > 70 ? "warning" : "muted", text);
-}
 
 function labels(pi: ExtensionAPI, ctx: ExtensionContext): BorderLabels {
   const theme = ctx.ui.theme;

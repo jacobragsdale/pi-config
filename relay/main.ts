@@ -13,7 +13,11 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import ssh2 from "ssh2";
-import { Relay, newHostKey } from "./relay.ts";
+
+// pi's theme draws bold and italics with chalk, which styles nothing when stdout
+// isn't a terminal, and the relay's is a log. Set before pi loads.
+process.env["FORCE_COLOR"] ??= "3";
+const { Relay, newHostKey } = await import("./relay.ts");
 
 const log = (line: string): void => {
   console.log(`${new Date().toISOString()} ${line}`);

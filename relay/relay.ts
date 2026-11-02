@@ -1,14 +1,14 @@
 /**
  * The pi-live relay. A host's pi connects to /host over a WebSocket and gets a
  * stream with an unguessable token. Guests run `ssh <token>@<relay>` and see
- * that stream drawn with pi's own components. Streams live only in memory and
- * end when the host disconnects; the relay stores nothing.
+ * that stream drawn with pi's own components, in the host's look. Streams live
+ * only in memory and end when the host disconnects; the relay stores nothing.
  */
 import { randomBytes } from "node:crypto";
 import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { VERSION, initTheme } from "@earendil-works/pi-coding-agent";
+import { VERSION } from "@earendil-works/pi-coding-agent";
 import ssh2 from "ssh2";
 import type { Connection, ServerChannel } from "ssh2";
 import { Check } from "typebox/value";
@@ -16,6 +16,7 @@ import { WebSocketServer } from "ws";
 import type { RawData, WebSocket } from "ws";
 import { HostMessageSchema, PROTOCOL_VERSION } from "../src/protocol.ts";
 import type { HostMessage, RelayMessage } from "../src/protocol.ts";
+import { useHostLook } from "./look.ts";
 import { Stream } from "./stream.ts";
 import { Viewer } from "./viewer.ts";
 
@@ -71,6 +72,9 @@ function newToken(): string {
   return token;
 }
 
+/** A request's path, or undefined when its URL can't be read, as `http://%zz/` can't. */
+const pathOf = (request: IncomingMessage): string | undefined => URL.parse(request.url ?? "/", "http://relay")?.pathname;
+
 const boundPort = (address: AddressInfo | string | null, fallback: number): number => (address !== null && typeof address === "object" ? address.port : fallback);
 
 function text(data: RawData): string {
@@ -95,7 +99,7 @@ function send(socket: WebSocket, message: RelayMessage): void {
   }
 }
 
-/** Tell a guest why they can't watch, then hang up. */
+/** Tell a guest why they can't join, then hang up. */
 function refuseGuest(channel: ServerChannel, reason: string): void {
   channel.write(`${reason}\r\n`);
   channel.exit(1);
@@ -121,11 +125,11 @@ export class Relay {
       ((line): void => {
         console.log(`${new Date().toISOString()} ${line}`);
       });
-    initTheme("dark", false);
+    useHostLook(this.#log);
     // Every guest's TUI adds a process exit listener.
     process.setMaxListeners(0);
     this.#http.on("upgrade", (request, socket, head) => {
-      if (new URL(request.url ?? "/", "http://relay").pathname !== "/host") {
+      if (pathOf(request) !== "/host") {
         socket.destroy();
         return;
       }
@@ -179,7 +183,7 @@ export class Relay {
   }
 
   #onRequest(request: IncomingMessage, response: ServerResponse): void {
-    const path = new URL(request.url ?? "/", "http://relay").pathname;
+    const path = pathOf(request);
     if (path === "/healthz") {
       response.writeHead(200, { "content-type": "text/plain" }).end("ok\n");
     } else if (path === "/") {
@@ -287,11 +291,12 @@ export class Relay {
           accept?.();
         });
         session.on("window-change", (accept: (() => void) | undefined, _reject, info) => {
+          size = { columns: info.cols, rows: info.rows };
           viewer?.resize(info.cols, info.rows);
           accept?.();
         });
         session.on("shell", (accept) => {
-          viewer = this.#watch(token, accept(), size);
+          viewer = this.#view(token, accept(), size);
         });
         session.on("exec", (accept) => {
           refuseGuest(accept(), "pi-live only shows the stream. Run the ssh command without anything after it.");
@@ -303,7 +308,7 @@ export class Relay {
     });
   }
 
-  #watch(token: string, channel: ServerChannel, size: { columns: number; rows: number } | undefined): Viewer | undefined {
+  #view(token: string, channel: ServerChannel, size: { columns: number; rows: number } | undefined): Viewer | undefined {
     const stream = this.#streams.get(token);
     if (size === undefined) {
       refuseGuest(channel, "pi-live needs a terminal. Run the ssh command without -T.");
@@ -313,12 +318,13 @@ export class Relay {
       refuseGuest(channel, "This pi-live link has ended, or the address is wrong. Ask the host for a new one.");
       return undefined;
     }
-    if (stream.guests.length >= MAX_GUESTS) {
+    if (stream.connected >= MAX_GUESTS) {
       refuseGuest(channel, `This stream already has ${String(MAX_GUESTS)} guests.`);
       return undefined;
     }
     this.#guestCount += 1;
     const viewer = new Viewer({ channel, columns: size.columns, rows: size.rows, stream, number: this.#guestCount });
+    stream.arrive(viewer);
     channel.on("close", () => {
       viewer.dispose();
     });

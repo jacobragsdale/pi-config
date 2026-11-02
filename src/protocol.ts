@@ -11,11 +11,11 @@
  *   append             entries added to the end of the branch
  *   tail               the assistant message being streamed, or null once it is finished
  *   tool               a running tool's progress (start, partial result, end)
- *   suggestion_status  the host used or dismissed a guest's suggestion
+ *   suggestion_status  the host accepted a guest's suggestion, which pi then runs ("used"), or rejected it ("dismissed")
  *
  * Relay to host:
  *   ready              the stream is open; carries the guests' join command
- *   guests             the names of everyone watching
+ *   guests             the names of the guests who have joined
  *   suggestion         a guest suggested a prompt
  *   error              the relay refused something; the connection closes after it
  *

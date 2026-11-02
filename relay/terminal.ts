@@ -3,8 +3,18 @@
  * their own TUI at their own terminal size. It skips the keyboard protocol
  * negotiation ProcessTerminal does: the viewer only needs plain keys.
  */
+import { StringDecoder } from "node:string_decoder";
 import { StdinBuffer } from "@earendil-works/pi-tui";
 import type { Terminal } from "@earendil-works/pi-tui";
+
+/**
+ * Guests are drawn at least this wide. pi's editor wraps forever, and the
+ * stack overflow ends the relay, when a character is wider than the space
+ * it has, as a CJK character is in an editor a few columns wide. A guest's
+ * terminal can claim any width, so narrower ones are drawn at this width and
+ * their terminal crops the lines.
+ */
+const MIN_COLUMNS = 20;
 
 /** The parts of an ssh2 ServerChannel the terminal uses. */
 export interface Channel {
@@ -30,13 +40,29 @@ export class ChannelTerminal implements Terminal {
   public start(onInput: (data: string) => void, onResize: () => void): void {
     this.#onResize = onResize;
     const buffer = new StdinBuffer();
-    buffer.on("data", onInput);
+    // StdinBuffer also delivers keys from a timer, where nothing would catch an
+    // error: a key the guest's screen can't handle is dropped instead of
+    // stopping the relay.
+    const input = (data: string): void => {
+      try {
+        onInput(data);
+      } catch {
+        // Dropped.
+      }
+    };
+    buffer.on("data", input);
     buffer.on("paste", (content) => {
-      onInput(`\x1b[200~${content}\x1b[201~`);
+      input(`\x1b[200~${content}\x1b[201~`);
     });
     this.#buffer = buffer;
+    // Decoded as pi decodes its own stdin, so a character split between two packets arrives whole.
+    const decoder = new StringDecoder("utf8");
     this.#channel.on("data", (data) => {
-      buffer.process(data);
+      const text = decoder.write(data);
+      // Keys that arrive after the guest left, such as the rest of a paste, go nowhere.
+      if (this.#buffer === buffer && text !== "") {
+        buffer.process(text);
+      }
     });
     this.write("\x1b[?2004h"); // Bracketed paste, so a pasted prompt arrives as one edit.
   }
@@ -69,7 +95,7 @@ export class ChannelTerminal implements Terminal {
   }
 
   public get columns(): number {
-    return this.#columns;
+    return Math.max(MIN_COLUMNS, this.#columns);
   }
 
   public get rows(): number {

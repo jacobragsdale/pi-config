@@ -14,6 +14,10 @@ COPY relay/package.json ./relay/
 RUN npm ci --omit=dev --workspace=relay --ignore-scripts && npm cache clean --force
 COPY src ./src
 COPY relay ./relay
+# Guests see the host's look: the team's theme, and the look extension's cards and frames.
+COPY themes ./themes
+COPY extensions/look ./extensions/look
+COPY extensions/live ./extensions/live
 
 USER node
 EXPOSE 8080 2222
