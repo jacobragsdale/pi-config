@@ -269,6 +269,18 @@ await test("a tool call shows its command, its live output, and its result", asy
   await alice.sees("line 0");
 });
 
+await test("a streamed tool call shows the arguments its saved message has, not the last snapshot's", async () => {
+  const { host: fake, token } = await host();
+  fake.send(meta({ cwd: "/repo", cwdLabel: "/repo" }));
+  fake.send({ type: "reset", entries: [] });
+  const alice = await guest(token);
+  fake.send({ type: "tail", message: assistant([{ type: "toolCall", id: "call-1", name: "bash", arguments: { command: "seq 1" } }], 3, "pending") });
+  await alice.sees("$ seq 1");
+  fake.send({ type: "append", entries: [{ id: "a", messages: [assistant([{ type: "toolCall", id: "call-1", name: "bash", arguments: { command: "seq 1 30" } }], 3, "toolUse")] }] });
+  fake.send({ type: "tail", message: null });
+  await alice.sees("$ seq 1 30");
+});
+
 await test("a guest who joins mid-run catches up on the streamed reply", async () => {
   const { host: fake, token } = await host();
   fake.send({ type: "reset", entries: [{ id: "a", messages: [user("Explain the cache")] }] });

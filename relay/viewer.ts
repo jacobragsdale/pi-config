@@ -526,6 +526,9 @@ export class Viewer implements Guest {
         continue;
       }
       const component = streamed?.tools.get(part.id) ?? this.#newTool(part.name, part.id, part.arguments);
+      // The host sends at most ten snapshots a second and drops the one still waiting when the message ends, so a
+      // streamed call may hold half its arguments, such as `seq 1` of `seq 1 30`; the saved message has them all.
+      component.updateArgs(part.arguments);
       if (failed) {
         component.updateResult({ content: [{ type: "text", text: failure(message) }], isError: true });
         this.#pending.delete(part.id);
