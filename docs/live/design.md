@@ -10,7 +10,7 @@ The same reasoning keeps the agent on the host's workstation rather than in the 
 
 ## The relay holds a stream only while the host is connected
 
-Pi 1.4.0 has no way for another process to attach to a running interactive session, so the host's pi has to send everything out itself. The extension dials out to the relay over a WebSocket, which also suits a corporate network: nothing needs to reach into WSL.
+Pi 1.5.0 has no way for another process to attach to a running interactive session, so the host's pi has to send everything out itself. The extension dials out to the relay over a WebSocket, which also suits a corporate network: nothing needs to reach into WSL.
 
 On connecting, and whenever the branch changes underneath it (a `/tree` jump, `/new`, `/resume`), pi sends the whole current branch, split into several messages when a long session's branch is more than the relay takes in one. After that it appends entries as pi saves them, sends the assistant message being streamed up to ten times a second, and sends tool progress as it arrives. The relay keeps the latest picture of each stream in memory, so a guest who joins late is drawn from it without asking the host for anything. The picture goes when the host disconnects. The relay writes nothing to disk.
 

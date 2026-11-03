@@ -4,7 +4,6 @@
  * renderers pi or another extension would use, so every tool keeps its
  * content (diffs, previews, click to expand) and only the frame changes.
  */
-import { keyHint } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult, Theme, ToolRendererResolver, ToolRenderers, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 import { Box, Text, mixColors, stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import type { Component } from "@earendil-works/pi-tui";
@@ -209,8 +208,11 @@ function fallbackCall(toolName: string): RenderCall {
   };
 }
 
-/** For a tool without its own result renderer: its text output, cut to PREVIEW_LINES until expanded. */
-function fallbackResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme): Component {
+/**
+ * For a tool without its own result renderer: its text output, cut to PREVIEW_LINES until expanded. The key hint
+ * comes from pi's context: an imported keyHint can reach this package's own copy of pi, which has no key bindings.
+ */
+function fallbackResult(result: AgentToolResult<unknown>, options: ToolRenderResultOptions, theme: Theme, context: RenderContext): Component {
   const output = result.content
     .flatMap((block) => (block.type === "text" ? [block.text] : []))
     .join("\n")
@@ -222,7 +224,7 @@ function fallbackResult(result: AgentToolResult<unknown>, options: ToolRenderRes
   const shown = options.expanded ? lines : lines.slice(0, PREVIEW_LINES);
   let text = `\n${shown.map((line) => theme.fg("toolOutput", line)).join("\n")}`;
   if (shown.length < lines.length) {
-    text += `\n${theme.fg("muted", `... (${String(lines.length - shown.length)} more lines,`)} ${keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
+    text += `\n${theme.fg("muted", `... (${String(lines.length - shown.length)} more lines,`)} ${context.keyHint("app.tools.expand", "to expand")}${theme.fg("muted", ")")}`;
   }
   return new Text(text, 0, 0);
 }

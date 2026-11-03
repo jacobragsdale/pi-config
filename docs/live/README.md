@@ -10,7 +10,7 @@ Your pi stays on your machine and dials out to a relay. Guests connect to the re
 
 ## Set up
 
-`/live` comes with pi-config, so there is nothing more to install. You need pi 1.4.0 and a relay. To deploy one, see [Deploy the relay to AKS](deploy.md); to try pi-live first, [run a relay on your machine](#run-a-relay-on-your-machine).
+`/live` comes with pi-config, so there is nothing more to install. You need pi 1.5.0 and a relay. To deploy one, see [Deploy the relay to AKS](deploy.md); to try pi-live first, [run a relay on your machine](#run-a-relay-on-your-machine).
 
 Tell pi where the relay is, in `~/.pi/agent/live.json`:
 
@@ -149,6 +149,6 @@ The relay keeps a stream in memory only while you are connected, writes nothing 
 
 ## Develop
 
-pi-live's tests run with pi-config's (see [Develop](../../README.md#develop)). They start real relays on free ports, connect guests over SSH, and drive pi 1.4.0 in RPC mode with a scripted provider and a throwaway agent directory, so they never touch `~/.pi/agent`.
+pi-live's tests run with pi-config's (see [Develop](../../README.md#develop)). They start real relays on free ports, connect guests over SSH, and drive pi 1.5.0 in RPC mode with a scripted provider and a throwaway agent directory, so they never touch `~/.pi/agent`.
 
 The relay is an npm workspace with its own `relay/package.json`, so pi never sees its dependencies and the image installs only those. It draws with the pi version pinned there, and with `themes/shadcn-dark.json` and the `look` extension's code, which the image copies in, so a change to either needs a rebuilt image before guests see it. When you upgrade pi, bump `@earendil-works/pi-coding-agent` and `pi-tui` in `relay/package.json`, and `pi-coding-agent`, `pi-ai` and `pi-agent-core` in the root `package.json`, all to the same version. Then run `npm install` and the tests, and rebuild the relay image. If the relay's pi and the host's differ, `/live` warns that guests may see small differences.

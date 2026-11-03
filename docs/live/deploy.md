@@ -127,7 +127,7 @@ To confirm it worked:
 
 1. Run `/live` in pi. It prints the command guests will run, `ssh TOKEN@JOIN_HOST`.
 2. Join from a second terminal with that command. ssh shows the fingerprint from step 2.
-3. Check the relay's log, which shows `YOUR_NAME opened a stream with pi 1.4.0`:
+3. Check the relay's log, which shows `YOUR_NAME opened a stream with pi 1.5.0`:
 
    ```bash
    kubectl logs deployment/pi-live -n $NS

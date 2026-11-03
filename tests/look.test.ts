@@ -105,6 +105,9 @@ function context(overrides: Partial<RenderContext> = {}): RenderContext {
     isError: false,
     durationMs: undefined,
     outputPad: 1,
+    // Not pi's default ctrl+o, so a hint that shows it came from this context.
+    keyText: () => "ctrl+x",
+    keyHint: (_keybinding, description) => `ctrl+x ${description}`,
     ...overrides
   };
 }
@@ -220,7 +223,7 @@ await test("tools that draw their own frame keep it, except pi's edit; tools wit
   assert.match(draw(drawn, 50)[1] ?? "", /│ lookup \{"id":7\} +│/);
   const many = { content: [{ type: "text" as const, text: Array.from({ length: 14 }, (_, i) => `line ${String(i)}`).join("\n") }], details: undefined };
   bare?.renderResult?.(many, { expanded: false, isPartial: false }, dark, context({ state, isPartial: false }));
-  assert.ok(draw(drawn, 50).some((line) => line.includes("... (4 more lines,")));
+  assert.ok(draw(drawn, 50).some((line) => line.includes("... (4 more lines, ctrl+x to expand)")));
 });
 
 await test("durations read as milliseconds, then seconds, then minutes", () => {

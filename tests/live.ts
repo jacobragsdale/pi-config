@@ -6,6 +6,7 @@ import xterm from "@xterm/headless";
 import ssh2 from "ssh2";
 import type { ClientChannel } from "ssh2";
 import { WebSocket } from "ws";
+import { VERSION } from "@earendil-works/pi-coding-agent";
 import { Check } from "typebox/value";
 import { PROTOCOL_VERSION, RelayMessageSchema } from "../src/protocol.ts";
 import type { HostMessage, Meta, RelayMessage } from "../src/protocol.ts";
@@ -96,7 +97,7 @@ export class FakeHost {
   /** Send hello and wait for the join command. */
   public async hello(host = "jacob", protocol = PROTOCOL_VERSION): Promise<Extract<RelayMessage, { type: "ready" }>> {
     await this.open();
-    this.send({ type: "hello", protocol, piVersion: "1.4.0", host });
+    this.send({ type: "hello", protocol, piVersion: VERSION, host });
     return eventually(
       () => this.received.find((m): m is Extract<RelayMessage, { type: "ready" }> => m.type === "ready"),
       () => `no ready; got ${JSON.stringify(this.received)}`
